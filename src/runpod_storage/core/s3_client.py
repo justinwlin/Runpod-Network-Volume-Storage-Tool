@@ -24,6 +24,23 @@ logger = logging.getLogger(__name__)
 
 class RunpodS3Client:
     """S3-compatible client for Runpod network volumes."""
+    
+    @staticmethod
+    def normalize_region(region: str) -> str:
+        """Normalize region/datacenter identifier to uppercase format."""
+        if not region:
+            return region
+        
+        # Convert to uppercase and strip whitespace
+        normalized = region.strip().upper()
+        
+        # Handle common variations
+        variations = {
+            "US-KS-1": "US-KS-2",  # In case someone uses the old identifier
+            "US-OR-1": "US-KS-2",  # Another potential confusion
+        }
+        
+        return variations.get(normalized, normalized)
 
     def __init__(
         self,
@@ -51,7 +68,7 @@ class RunpodS3Client:
                 "RUNPOD_S3_SECRET_KEY environment variables or pass as parameters."
             )
 
-        self.region = region
+        self.region = self.normalize_region(region)
         self.endpoint_url = endpoint_url
         self.max_retries = max_retries
 
@@ -477,7 +494,7 @@ class LargeMultipartUploader:
         self.file_path = file_path
         self.bucket = bucket
         self.key = key
-        self.region = region
+        self.region = RunpodS3Client.normalize_region(region)
         self.access_key = access_key
         self.secret_key = secret_key
         self.endpoint = endpoint

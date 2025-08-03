@@ -14,6 +14,23 @@ from rich.table import Table
 from ..core.client import RunpodClient
 from ..core.s3_client import RunpodS3Client
 
+
+def prompt_datacenter(prompt_text: str, default: str = "EU-RO-1") -> str:
+    """Prompt for datacenter with case-insensitive validation."""
+    available = list(RunpodClient.get_available_datacenters().keys())
+    choices_text = "/".join(available)
+    full_prompt = f"{prompt_text} [{choices_text}]"
+    
+    while True:
+        response = Prompt.ask(full_prompt, default=default)
+        normalized = RunpodClient.normalize_datacenter(response)
+        
+        if normalized in available:
+            return normalized
+        
+        console.print(f"[red]Invalid datacenter '{response}'. Available options: {', '.join(available)}[/red]")
+        console.print("[yellow]Note: Input is case-insensitive[/yellow]")
+
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
@@ -168,7 +185,7 @@ def list_volumes(ctx):
 @click.option("--size", type=int, prompt="Size in GB", help="Size in GB (10-4000)")
 @click.option(
     "--datacenter",
-    type=click.Choice(list(RunpodClient.get_available_datacenters().keys())),
+    type=click.Choice(list(RunpodClient.get_available_datacenters().keys()), case_sensitive=False),
     help="Datacenter ID",
 )
 @click.pass_context
@@ -184,11 +201,7 @@ def create_volume(ctx, name, size, datacenter):
             console.print("\nAvailable datacenters:")
             for dc_id, endpoint in client.get_available_datacenters().items():
                 console.print(f"  {dc_id}: {endpoint}")
-            datacenter = Prompt.ask(
-                "Choose datacenter",
-                choices=list(client.get_available_datacenters().keys()),
-                default="EU-RO-1",
-            )
+            datacenter = prompt_datacenter("Choose datacenter")
 
         with Progress(
             SpinnerColumn(),
@@ -196,7 +209,8 @@ def create_volume(ctx, name, size, datacenter):
             console=console,
         ) as progress:
             task = progress.add_task("Creating network volume...", total=None)
-            volume = client.create_network_volume(name, size, datacenter)
+            normalized_datacenter = RunpodClient.normalize_datacenter(datacenter)
+            volume = client.create_network_volume(name, size, normalized_datacenter)
             progress.update(task, completed=1)
 
         console.print("[green]✓[/green] Created network volume:")
@@ -478,11 +492,7 @@ def interactive(ctx):
             elif choice == "2":
                 name = Prompt.ask("Volume name")
                 size = int(Prompt.ask("Size in GB", default="10"))
-                datacenter = Prompt.ask(
-                    "Datacenter",
-                    choices=list(client.get_available_datacenters().keys()),
-                    default="EU-RO-1",
-                )
+                datacenter = prompt_datacenter("Datacenter")
                 _interactive_create_volume(ctx.obj["api_key"], name, size, datacenter)
             elif choice == "3":
                 _interactive_update_volume(ctx.obj["api_key"])
@@ -593,7 +603,8 @@ def _interactive_create_volume(api_key, name, size, datacenter):
             console=console,
         ) as progress:
             task = progress.add_task("Creating network volume...", total=None)
-            volume = client.create_network_volume(name, size, datacenter)
+            normalized_datacenter = RunpodClient.normalize_datacenter(datacenter)
+            volume = client.create_network_volume(name, size, normalized_datacenter)
             progress.update(task, completed=1)
 
         console.print("[green]✓[/green] Created network volume:")

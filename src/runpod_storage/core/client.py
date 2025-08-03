@@ -22,6 +22,30 @@ class RunpodClient:
         "US-KS-2": "https://s3api-us-ks-2.runpod.io/",
     }
 
+    @staticmethod
+    def normalize_datacenter(datacenter: str) -> str:
+        """Normalize datacenter identifier to uppercase format.
+        
+        Args:
+            datacenter: Datacenter identifier in any case
+            
+        Returns:
+            Normalized uppercase datacenter identifier
+        """
+        if not datacenter:
+            return datacenter
+        
+        # Convert to uppercase and strip whitespace
+        normalized = datacenter.strip().upper()
+        
+        # Handle common variations
+        variations = {
+            "US-KS-1": "US-KS-2",  # In case someone uses the old identifier
+            "US-OR-1": "US-KS-2",  # Another potential confusion
+        }
+        
+        return variations.get(normalized, normalized)
+
     def __init__(self, api_key: Optional[str] = None):
         """Initialize the Runpod client.
 
@@ -156,9 +180,10 @@ class RunpodClient:
 
     def get_s3_endpoint(self, datacenter_id: str) -> str:
         """Get S3 endpoint URL for a datacenter."""
-        if datacenter_id not in self.DATACENTERS:
-            raise ValueError(f"No S3 endpoint for datacenter {datacenter_id}")
-        return self.DATACENTERS[datacenter_id]
+        normalized_datacenter = self.normalize_datacenter(datacenter_id)
+        if normalized_datacenter not in self.DATACENTERS:
+            raise ValueError(f"No S3 endpoint for datacenter {datacenter_id} (normalized: {normalized_datacenter})")
+        return self.DATACENTERS[normalized_datacenter]
 
     @classmethod
     def get_available_datacenters(cls) -> Dict[str, str]:

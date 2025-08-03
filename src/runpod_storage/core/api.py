@@ -38,7 +38,8 @@ class RunpodStorageAPI:
 
     def _get_s3_client(self, datacenter_id: str) -> RunpodS3Client:
         """Get or create S3 client for a datacenter."""
-        if datacenter_id not in self.s3_clients:
+        normalized_datacenter = RunpodClient.normalize_datacenter(datacenter_id)
+        if normalized_datacenter not in self.s3_clients:
             if not self.s3_access_key or not self.s3_secret_key:
                 if self.auto_setup_s3:
                     raise ValueError(
@@ -49,15 +50,15 @@ class RunpodStorageAPI:
                 else:
                     return None
 
-            endpoint_url = self.client.get_s3_endpoint(datacenter_id)
-            self.s3_clients[datacenter_id] = RunpodS3Client(
+            endpoint_url = self.client.get_s3_endpoint(normalized_datacenter)
+            self.s3_clients[normalized_datacenter] = RunpodS3Client(
                 access_key=self.s3_access_key,
                 secret_key=self.s3_secret_key,
-                region=datacenter_id,
+                region=normalized_datacenter,
                 endpoint_url=endpoint_url,
             )
 
-        return self.s3_clients[datacenter_id]
+        return self.s3_clients[normalized_datacenter]
 
     # Volume Management
     def list_volumes(self) -> List[Dict[str, Any]]:
@@ -77,7 +78,8 @@ class RunpodStorageAPI:
         Returns:
             Created volume information
         """
-        return self.client.create_network_volume(name, size, datacenter_id)
+        normalized_datacenter = RunpodClient.normalize_datacenter(datacenter_id)
+        return self.client.create_network_volume(name, size, normalized_datacenter)
 
     def get_volume(self, volume_id: str) -> Dict[str, Any]:
         """Get volume details."""
