@@ -595,35 +595,49 @@ class LargeMultipartUploader:
         try:
             logger.info(f"Verifying compatibility for upload {upload_id}")
             
-            # Get upload metadata (if we stored hash in metadata)
-            # For now, we'll use a heuristic: check if parts exist and file size matches
+            # Get existing parts
             parts = self.list_existing_parts(upload_id)
             logger.info(f"Found {len(parts)} existing parts")
             
             if not parts:
                 logger.info("No parts found, not compatible")
                 return False
-                
-            # Calculate expected file size from parts
-            expected_size = 0
+            
+            # Get the current file size and calculate expected total parts
+            actual_file_size = os.path.getsize(self.file_path)
+            expected_total_parts = (actual_file_size + self.part_size - 1) // self.part_size
+            
+            logger.info(f"Current file size: {actual_file_size} bytes")
+            logger.info(f"Expected total parts for this file: {expected_total_parts}")
+            logger.info(f"Existing uploaded parts: {len(parts)}")
+            
+            # Check if part size is consistent
             for part in parts:
                 part_size = part.get("Size", 0)
-                expected_size += part_size
-                logger.info(f"Part {part['PartNumber']}: {part_size} bytes")
+                part_number = part["PartNumber"]
                 
-            actual_size = os.path.getsize(self.file_path)
-            logger.info(f"Expected size from parts: {expected_size}, actual file size: {actual_size}")
+                # For all parts except the last one, size should match part_size
+                if part_number < expected_total_parts:
+                    if part_size != self.part_size:
+                        logger.info(f"Part {part_number} size mismatch: expected {self.part_size}, got {part_size}")
+                        return False
+                else:
+                    # For the last part, calculate expected size
+                    expected_last_part_size = actual_file_size - ((expected_total_parts - 1) * self.part_size)
+                    if part_size != expected_last_part_size:
+                        logger.info(f"Last part {part_number} size mismatch: expected {expected_last_part_size}, got {part_size}")
+                        return False
+                
+                logger.info(f"Part {part_number}: {part_size} bytes ✓")
             
-            # If sizes are close (within part_size), consider it compatible
-            # This is a heuristic since we can't store hash in S3 metadata easily
-            size_diff = abs(expected_size - actual_size)
-            logger.info(f"Size difference: {size_diff} bytes (tolerance: {self.part_size})")
+            # Verify that we don't have more parts than expected
+            max_part_number = max(part["PartNumber"] for part in parts)
+            if max_part_number > expected_total_parts:
+                logger.info(f"Upload has more parts ({max_part_number}) than expected ({expected_total_parts})")
+                return False
             
-            if size_diff <= self.part_size:
-                logger.info(f"Upload appears compatible (size diff: {size_diff} bytes)")
-                return True
-            else:
-                logger.info(f"Upload not compatible: size difference {size_diff} > {self.part_size}")
+            logger.info("Upload appears compatible - part sizes and file size match")
+            return True
                 
         except Exception as e:
             logger.warning(f"Error verifying upload compatibility: {e}")
