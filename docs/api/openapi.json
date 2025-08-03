@@ -402,7 +402,7 @@
           "Storage"
         ],
         "summary": "List files in volume",
-        "description": "List all files in a network volume, optionally filtered by prefix.",
+        "description": "List all files in a network volume, optionally filtered by prefix. Requires S3 credentials in request body.",
         "operationId": "list_files_api_v1_volumes__volume_id__files_list_post",
         "security": [
           {
@@ -487,7 +487,7 @@
           "Storage"
         ],
         "summary": "Upload file",
-        "description": "Upload a file to a network volume. Supports large files via multipart upload.",
+        "description": "Upload a file to a network volume. Supports large files via multipart upload. Requires S3 credentials in form data.",
         "operationId": "upload_file_api_v1_volumes__volume_id__files_post",
         "security": [
           {
@@ -572,7 +572,7 @@
           "Storage"
         ],
         "summary": "Download file",
-        "description": "Download a file from a network volume.",
+        "description": "Download a file from a network volume. Requires S3 credentials in request body.",
         "operationId": "download_file_api_v1_volumes__volume_id__files_download_post",
         "security": [
           {
@@ -650,7 +650,7 @@
           "Storage"
         ],
         "summary": "Delete file",
-        "description": "Delete a file from a network volume.",
+        "description": "Delete a file from a network volume. Requires S3 credentials in request body.",
         "operationId": "delete_file_api_v1_volumes__volume_id__files_delete_post",
         "security": [
           {
@@ -1239,8 +1239,15 @@
             "description": "Size in GB",
             "example": 50
           },
-          "datacenter_id": {
-            "$ref": "#/components/schemas/DatacenterID",
+          "dataCenterId": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DatacenterID"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "description": "Datacenter location"
           },
           "status": {
@@ -1272,8 +1279,7 @@
         "required": [
           "id",
           "name",
-          "size",
-          "datacenter_id"
+          "size"
         ],
         "title": "NetworkVolume",
         "description": "Network volume information."

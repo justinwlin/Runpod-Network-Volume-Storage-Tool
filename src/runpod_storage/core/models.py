@@ -187,13 +187,14 @@ class NetworkVolume(BaseModel):
     id: str = Field(..., description="Unique volume identifier", example="abc123def456")
     name: str = Field(..., description="Volume name", example="my-storage-volume")
     size: int = Field(..., description="Size in GB", example=50)
-    datacenter_id: DatacenterID = Field(..., description="Datacenter location")
+    datacenter_id: Optional[DatacenterID] = Field(None, description="Datacenter location", alias="dataCenterId")
     status: Optional[VolumeStatus] = Field(None, description="Volume status")
     created_at: Optional[datetime] = Field(None, description="Creation timestamp")
     
     class Config:
         """Pydantic config."""
         use_enum_values = True
+        populate_by_name = True  # Allow both field name and alias
 
 
 class FileInfo(BaseModel):

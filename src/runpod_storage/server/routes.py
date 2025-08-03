@@ -81,9 +81,9 @@ async def get_api_key(
 
 
 async def get_storage_api(api_key: str = Depends(get_api_key)) -> RunpodStorageAPI:
-    """Get authenticated storage API instance."""
+    """Get authenticated storage API instance for volume operations only."""
     try:
-        return RunpodStorageAPI(api_key=api_key)
+        return RunpodStorageAPI(api_key=api_key, auto_setup_s3=False)
     except AuthenticationError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -219,7 +219,7 @@ async def delete_volume(
     "/volumes/{volume_id}/files/list",
     response_model=ListFilesResponse,
     summary="List files in volume",
-    description="List all files in a network volume, optionally filtered by prefix."
+    description="List all files in a network volume, optionally filtered by prefix. Requires S3 credentials in request body."
 )
 async def list_files(
     volume_id: str,
@@ -253,7 +253,7 @@ async def list_files(
     "/volumes/{volume_id}/files",
     response_model=UploadResponse,
     summary="Upload file",
-    description="Upload a file to a network volume. Supports large files via multipart upload."
+    description="Upload a file to a network volume. Supports large files via multipart upload. Requires S3 credentials in form data."
 )
 async def upload_file(
     volume_id: str,
@@ -319,7 +319,7 @@ async def upload_file(
     "/volumes/{volume_id}/files/download",
     response_class=FileResponse,
     summary="Download file",
-    description="Download a file from a network volume."
+    description="Download a file from a network volume. Requires S3 credentials in request body."
 )
 async def download_file(
     volume_id: str,
@@ -364,7 +364,7 @@ async def download_file(
     "/volumes/{volume_id}/files/delete",
     response_model=DeleteResponse,
     summary="Delete file",
-    description="Delete a file from a network volume."
+    description="Delete a file from a network volume. Requires S3 credentials in request body."
 )
 async def delete_file(
     volume_id: str,
