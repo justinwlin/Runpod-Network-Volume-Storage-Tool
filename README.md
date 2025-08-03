@@ -1,7 +1,7 @@
 # Self Project
 
 This is a project I just had Claude Code throw together for my own usecase b/c I saw Runpod come out with this:
-https://docs.runpod.io/serverless/storage/s3-api#uploading-very-large-files
+https://docs.runpod.io/serverless/storage/s3-api
 
 I validated the basics for my use-case, if you find bugs feel free make a PR request.
 
