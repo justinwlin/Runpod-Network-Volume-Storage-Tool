@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Runpod Storage API",
-    "description": "\n        Professional REST API for Runpod network storage management.\n        \n        This API provides comprehensive access to Runpod storage operations including:\n        - Network volume management (create, list, delete)\n        - File operations (upload, download, list, delete)\n        - Robust error handling and validation\n        - OpenAPI 3.0 compliant documentation\n        \n        ## Authentication\n        \n        All endpoints require authentication via API key. You can authenticate in several ways:\n        \n        1. **Bearer Token Header**: `Authorization: Bearer your-api-key`\n        2. **API Key Header**: `X-API-Key: your-api-key`\n        3. **Query Parameter**: `?api_key=your-api-key`\n        \n        Get your API key from [Runpod Console](https://console.runpod.io/user/settings).\n        \n        ## Rate Limiting\n        \n        API requests are subject to rate limiting. See response headers for current limits.\n        \n        ## SDKs and Tools\n        \n        - **Python SDK**: `pip install runpod-storage`\n        - **CLI Tool**: `runpod-storage --help`\n        - **Docker Image**: `docker run runpod/storage-api`\n        ",
+    "description": "\n        Professional REST API for Runpod network storage management.\n\n        This API provides comprehensive access to Runpod storage operations including:\n        - Network volume management (create, list, delete)\n        - File operations (upload, download, list, delete)\n        - Robust error handling and validation\n        - OpenAPI 3.0 compliant documentation\n\n        ## Authentication\n\n        All endpoints require authentication via API key. You can authenticate in several ways:\n\n        1. **Bearer Token Header**: `Authorization: Bearer your-api-key`\n        2. **API Key Header**: `X-API-Key: your-api-key`\n        3. **Query Parameter**: `?api_key=your-api-key`\n\n        Get your API key from [Runpod Console](https://console.runpod.io/user/settings).\n\n        ## Rate Limiting\n\n        API requests are subject to rate limiting. See response headers for current limits.\n\n        ## SDKs and Tools\n\n        - **Python SDK**: `pip install runpod-storage`\n        - **CLI Tool**: `runpod-storage --help`\n        - **Docker Image**: `docker run runpod/storage-api`\n        ",
     "contact": {
       "name": "Runpod Storage Team",
       "url": "https://github.com/runpod/runpod-storage",
@@ -734,8 +734,8 @@
         "tags": [
           "Storage"
         ],
-        "summary": "List datacenters",
-        "description": "Get information about available Runpod datacenters.",
+        "summary": "List available datacenters",
+        "description": "Get information about available Runpod datacenters for volume creation.",
         "operationId": "list_datacenters_api_v1_datacenters_get",
         "security": [
           {

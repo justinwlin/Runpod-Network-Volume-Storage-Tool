@@ -60,7 +60,7 @@ Set both sets of credentials:
 # Volume Management API
 export RUNPOD_API_KEY="rpa_your_api_key_here"
 
-# File Operations API  
+# File Operations API
 export RUNPOD_S3_ACCESS_KEY="user_your_access_key_here"
 export RUNPOD_S3_SECRET_KEY="rps_your_secret_key_here"
 ```
@@ -98,9 +98,9 @@ s3 = boto3.client(
 2. **Region Matching**: S3 operations must use the correct datacenter endpoint
 3. **Volume as Bucket**: In S3 operations, volume ID acts as the S3 bucket name
 4. **Security**: Never commit credentials to code - use environment variables
-5. **Key Prefixes**: 
+5. **Key Prefixes**:
    - API keys start with `rpa_`
-   - S3 access keys start with `user_`  
+   - S3 access keys start with `user_`
    - S3 secret keys start with `rps_`
 
 ## 🛠️ SDK Usage

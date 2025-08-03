@@ -1,40 +1,39 @@
 """S3-compatible client for Runpod network volume file operations."""
 
-import os
-import math
-import time
 import logging
+import math
+import os
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from threading import Lock
-from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
+from threading import Lock
+from typing import Any, Dict, List, Optional
 
 import boto3
 from botocore.config import Config
 from botocore.exceptions import (
     BotoCoreError,
     ClientError,
-    ReadTimeoutError,
     ConnectTimeoutError,
+    ReadTimeoutError,
 )
-
 
 logger = logging.getLogger(__name__)
 
 
 class RunpodS3Client:
     """S3-compatible client for Runpod network volumes."""
-    
+
     def __init__(
         self,
         access_key: Optional[str] = None,
         secret_key: Optional[str] = None,
         region: str = "EU-RO-1",
         endpoint_url: str = "https://s3api-eu-ro-1.runpod.io/",
-        max_retries: int = 5
+        max_retries: int = 5,
     ):
         """Initialize S3 client for Runpod.
-        
+
         Args:
             access_key: S3 API access key (from Runpod console)
             secret_key: S3 API secret key (from Runpod console)
@@ -44,34 +43,32 @@ class RunpodS3Client:
         """
         self.access_key = access_key or os.getenv("RUNPOD_S3_ACCESS_KEY")
         self.secret_key = secret_key or os.getenv("RUNPOD_S3_SECRET_KEY")
-        
+
         if not self.access_key or not self.secret_key:
             raise ValueError(
                 "S3 API credentials required. Set RUNPOD_S3_ACCESS_KEY and "
                 "RUNPOD_S3_SECRET_KEY environment variables or pass as parameters."
             )
-        
+
         self.region = region
         self.endpoint_url = endpoint_url
         self.max_retries = max_retries
-        
+
         self.session = boto3.Session(
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
             region_name=self.region,
         )
-        
+
         self.config = Config(
             region_name=self.region,
             retries={"max_attempts": self.max_retries, "mode": "standard"},
         )
-        
+
         self.s3 = self.session.client(
-            "s3",
-            config=self.config,
-            endpoint_url=self.endpoint_url
+            "s3", config=self.config, endpoint_url=self.endpoint_url
         )
-    
+
     def list_volumes(self) -> List[str]:
         """List all available network volumes (S3 buckets)."""
         try:
@@ -80,62 +77,66 @@ class RunpodS3Client:
         except Exception as e:
             logger.error(f"Failed to list volumes: {e}")
             raise
-    
+
     def list_files(self, volume_id: str, prefix: str = "") -> List[Dict[str, Any]]:
         """List files in a network volume.
-        
+
         Args:
             volume_id: Network volume ID
             prefix: Optional prefix to filter files
-            
+
         Returns:
             List of file information dictionaries
         """
         try:
             paginator = self.s3.get_paginator("list_objects_v2")
             files = []
-            
+
             for page in paginator.paginate(Bucket=volume_id, Prefix=prefix):
                 for obj in page.get("Contents", []):
-                    files.append({
-                        "key": obj["Key"],
-                        "size": obj["Size"],
-                        "last_modified": obj["LastModified"],
-                        "etag": obj["ETag"].strip('"'),
-                    })
-            
+                    files.append(
+                        {
+                            "key": obj["Key"],
+                            "size": obj["Size"],
+                            "last_modified": obj["LastModified"],
+                            "etag": obj["ETag"].strip('"'),
+                        }
+                    )
+
             return files
         except Exception as e:
             logger.error(f"Failed to list files in volume {volume_id}: {e}")
             raise
-    
+
     def upload_file(
         self,
         local_path: str,
         volume_id: str,
         remote_path: str,
-        chunk_size: int = 50 * 1024 * 1024  # 50MB
+        chunk_size: int = 50 * 1024 * 1024,  # 50MB
     ) -> bool:
         """Upload a file to network volume.
-        
+
         Args:
             local_path: Local file path
             volume_id: Network volume ID
             remote_path: Remote file path in volume
             chunk_size: Size of chunks for multipart upload
-            
+
         Returns:
             True if successful
         """
         local_path = Path(local_path)
         if not local_path.exists():
             raise FileNotFoundError(f"Local file not found: {local_path}")
-        
+
         if local_path.is_dir():
-            raise ValueError(f"Path is a directory. Use upload_directory() for directory uploads: {local_path}")
-        
+            raise ValueError(
+                f"Path is a directory. Use upload_directory() for directory uploads: {local_path}"
+            )
+
         file_size = local_path.stat().st_size
-        
+
         # Use simple upload for small files, multipart for large files
         if file_size < chunk_size:
             return self._simple_upload(str(local_path), volume_id, remote_path)
@@ -143,7 +144,7 @@ class RunpodS3Client:
             return self._multipart_upload(
                 str(local_path), volume_id, remote_path, chunk_size
             )
-    
+
     def upload_directory(
         self,
         local_dir: str,
@@ -151,10 +152,10 @@ class RunpodS3Client:
         remote_dir: str = "",
         exclude_patterns: List[str] = None,
         delete: bool = False,
-        progress_callback=None
+        progress_callback=None,
     ) -> bool:
         """Upload a directory to network volume (sync functionality).
-        
+
         Args:
             local_dir: Local directory path
             volume_id: Network volume ID
@@ -162,39 +163,41 @@ class RunpodS3Client:
             exclude_patterns: List of glob patterns to exclude
             delete: Delete remote files not present locally
             progress_callback: Callback function for progress updates
-            
+
         Returns:
             True if successful
         """
         import fnmatch
         from concurrent.futures import ThreadPoolExecutor, as_completed
-        
+
         local_dir = Path(local_dir)
         if not local_dir.exists():
             raise FileNotFoundError(f"Local directory not found: {local_dir}")
-        
+
         if not local_dir.is_dir():
             raise ValueError(f"Path is not a directory: {local_dir}")
-        
+
         exclude_patterns = exclude_patterns or []
-        
+
         # Get all local files
         local_files = []
-        for file_path in local_dir.rglob('*'):
+        for file_path in local_dir.rglob("*"):
             if file_path.is_file():
                 relative_path = file_path.relative_to(local_dir)
-                
+
                 # Check exclude patterns
                 excluded = False
                 for pattern in exclude_patterns:
                     if fnmatch.fnmatch(str(relative_path), pattern):
                         excluded = True
                         break
-                
+
                 if not excluded:
-                    remote_file_path = str(Path(remote_dir) / relative_path).replace('\\', '/')
+                    remote_file_path = str(Path(remote_dir) / relative_path).replace(
+                        "\\", "/"
+                    )
                     local_files.append((str(file_path), remote_file_path))
-        
+
         # Get existing remote files if delete is enabled
         remote_files = set()
         if delete:
@@ -203,13 +206,13 @@ class RunpodS3Client:
                 remote_files = {f["key"] for f in existing_files}
             except Exception as e:
                 logger.warning(f"Could not list remote files for deletion: {e}")
-        
+
         total_files = len(local_files)
         uploaded_files = 0
         failed_files = []
-        
+
         logger.info(f"Starting directory upload: {total_files} files")
-        
+
         # Upload files with threading
         def upload_single_file(file_info):
             local_file, remote_file = file_info
@@ -219,128 +222,135 @@ class RunpodS3Client:
             except Exception as e:
                 logger.error(f"Failed to upload {local_file}: {e}")
                 return False, remote_file
-        
+
         # Use ThreadPoolExecutor for concurrent uploads
         with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = {executor.submit(upload_single_file, file_info): file_info for file_info in local_files}
-            
+            futures = {
+                executor.submit(upload_single_file, file_info): file_info
+                for file_info in local_files
+            }
+
             for future in as_completed(futures):
                 success, remote_file = future.result()
                 uploaded_files += 1
-                
+
                 if success:
                     remote_files.discard(remote_file)  # Remove from deletion list
                     if progress_callback:
                         progress_callback(uploaded_files, total_files, remote_file)
-                    logger.info(f"Uploaded ({uploaded_files}/{total_files}): {remote_file}")
+                    logger.info(
+                        f"Uploaded ({uploaded_files}/{total_files}): {remote_file}"
+                    )
                 else:
                     failed_files.append(remote_file)
-        
+
         # Delete remote files not present locally
         if delete and remote_files:
-            logger.info(f"Deleting {len(remote_files)} remote files not present locally")
+            logger.info(
+                f"Deleting {len(remote_files)} remote files not present locally"
+            )
             for remote_file in remote_files:
                 try:
                     self.delete_file(volume_id, remote_file)
                     logger.info(f"Deleted: {remote_file}")
                 except Exception as e:
                     logger.error(f"Failed to delete {remote_file}: {e}")
-        
+
         if failed_files:
             logger.error(f"Failed to upload {len(failed_files)} files: {failed_files}")
             return False
-        
+
         logger.info(f"Directory upload completed: {uploaded_files} files uploaded")
         return True
-    
+
     def download_directory(
-        self,
-        volume_id: str,
-        remote_dir: str,
-        local_dir: str,
-        progress_callback=None
+        self, volume_id: str, remote_dir: str, local_dir: str, progress_callback=None
     ) -> bool:
         """Download a directory from network volume.
-        
+
         Args:
             volume_id: Network volume ID
             remote_dir: Remote directory path in volume
             local_dir: Local directory path to download to
             progress_callback: Callback function for progress updates
-            
+
         Returns:
             True if successful
         """
         from concurrent.futures import ThreadPoolExecutor, as_completed
-        
+
         local_dir = Path(local_dir)
         local_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Get all remote files
         try:
             remote_files = self.list_files(volume_id, remote_dir)
         except Exception as e:
             logger.error(f"Failed to list remote files: {e}")
             raise
-        
+
         total_files = len(remote_files)
         downloaded_files = 0
         failed_files = []
-        
+
         logger.info(f"Starting directory download: {total_files} files")
-        
+
         def download_single_file(file_info):
             remote_file = file_info["key"]
             # Remove the remote_dir prefix if present
             if remote_dir and remote_file.startswith(remote_dir):
-                relative_path = remote_file[len(remote_dir):].lstrip('/')
+                relative_path = remote_file[len(remote_dir) :].lstrip("/")
             else:
                 relative_path = remote_file
-            
+
             local_file = local_dir / relative_path
-            
+
             try:
                 self.download_file(volume_id, remote_file, str(local_file))
                 return True, remote_file
             except Exception as e:
                 logger.error(f"Failed to download {remote_file}: {e}")
                 return False, remote_file
-        
+
         # Use ThreadPoolExecutor for concurrent downloads
         with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = {executor.submit(download_single_file, file_info): file_info for file_info in remote_files}
-            
+            futures = {
+                executor.submit(download_single_file, file_info): file_info
+                for file_info in remote_files
+            }
+
             for future in as_completed(futures):
                 success, remote_file = future.result()
                 downloaded_files += 1
-                
+
                 if success:
                     if progress_callback:
                         progress_callback(downloaded_files, total_files, remote_file)
-                    logger.info(f"Downloaded ({downloaded_files}/{total_files}): {remote_file}")
+                    logger.info(
+                        f"Downloaded ({downloaded_files}/{total_files}): {remote_file}"
+                    )
                 else:
                     failed_files.append(remote_file)
-        
+
         if failed_files:
-            logger.error(f"Failed to download {len(failed_files)} files: {failed_files}")
+            logger.error(
+                f"Failed to download {len(failed_files)} files: {failed_files}"
+            )
             return False
-        
-        logger.info(f"Directory download completed: {downloaded_files} files downloaded")
+
+        logger.info(
+            f"Directory download completed: {downloaded_files} files downloaded"
+        )
         return True
-    
-    def download_file(
-        self,
-        volume_id: str,
-        remote_path: str,
-        local_path: str
-    ) -> bool:
+
+    def download_file(self, volume_id: str, remote_path: str, local_path: str) -> bool:
         """Download a file from network volume.
-        
+
         Args:
             volume_id: Network volume ID
             remote_path: Remote file path in volume
             local_path: Local file path to save to
-            
+
         Returns:
             True if successful
         """
@@ -348,7 +358,7 @@ class RunpodS3Client:
             # Create local directory if it doesn't exist
             local_path = Path(local_path)
             local_path.parent.mkdir(parents=True, exist_ok=True)
-            
+
             logger.info(f"Downloading {remote_path} to {local_path}")
             self.s3.download_file(volume_id, remote_path, str(local_path))
             logger.info("Download completed successfully")
@@ -356,7 +366,7 @@ class RunpodS3Client:
         except Exception as e:
             logger.error(f"Failed to download file: {e}")
             raise
-    
+
     def delete_file(self, volume_id: str, remote_path: str) -> bool:
         """Delete a file from network volume."""
         try:
@@ -366,7 +376,7 @@ class RunpodS3Client:
         except Exception as e:
             logger.error(f"Failed to delete file: {e}")
             raise
-    
+
     def _simple_upload(self, local_path: str, volume_id: str, remote_path: str) -> bool:
         """Upload a file using simple upload."""
         try:
@@ -377,13 +387,9 @@ class RunpodS3Client:
         except Exception as e:
             logger.error(f"Failed to upload file: {e}")
             raise
-    
+
     def _multipart_upload(
-        self,
-        local_path: str,
-        volume_id: str,
-        remote_path: str,
-        chunk_size: int
+        self, local_path: str, volume_id: str, remote_path: str, chunk_size: int
     ) -> bool:
         """Upload a large file using multipart upload with the robust implementation."""
         try:

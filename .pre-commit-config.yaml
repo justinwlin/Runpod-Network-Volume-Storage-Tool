@@ -1,0 +1,65 @@
+repos:
+  # Code formatting and linting
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-json
+      - id: check-merge-conflict
+      - id: debug-statements
+
+  # Python code formatting
+  - repo: https://github.com/psf/black
+    rev: 23.7.0
+    hooks:
+      - id: black
+        language_version: python3
+
+  # Import sorting
+  - repo: https://github.com/pycqa/isort
+    rev: 5.12.0
+    hooks:
+      - id: isort
+        args: ["--profile", "black"]
+
+  # Linting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.7
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+
+  # Type checking (disabled for development - run manually with 'make lint')
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: v1.5.1
+  #   hooks:
+  #     - id: mypy
+  #       additional_dependencies: [types-requests, types-tabulate]
+  #       args: [--ignore-missing-imports, --no-strict-optional]
+  #       files: ^src/
+
+  # OpenAPI spec generation
+  - repo: local
+    hooks:
+      - id: generate-openapi
+        name: Generate OpenAPI Specification
+        entry: uv run python scripts/generate_openapi.py
+        language: system
+        files: ^(src/runpod_storage/server/|src/runpod_storage/core/models\.py)
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
+  # Documentation validation
+  - repo: local
+    hooks:
+      - id: validate-openapi
+        name: Validate OpenAPI Specification
+        entry: uv run python -c "import json; json.load(open('docs/api/openapi.json')); print('✅ OpenAPI spec is valid JSON')"
+        language: system
+        files: ^docs/api/openapi\.json$
+        pass_filenames: false
+        stages: [pre-commit]

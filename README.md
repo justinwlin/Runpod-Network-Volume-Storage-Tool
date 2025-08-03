@@ -89,7 +89,7 @@ runpod-storage upload /path/to/file.txt volume-id
 # Upload directories (sync functionality)
 runpod-storage upload /path/to/directory volume-id
 
-# Download files  
+# Download files
 runpod-storage download volume-id remote/file.txt
 
 # Download directories
@@ -128,8 +128,8 @@ api.upload_file("local_file.txt", volume['id'], "remote_file.txt")
 
 # Upload entire directory (with sync functionality)
 api.upload_directory(
-    "local_directory/", 
-    volume['id'], 
+    "local_directory/",
+    volume['id'],
     "remote_directory/",
     exclude_patterns=["*.log", "*.tmp"],
     delete=True  # Delete remote files not present locally
@@ -200,7 +200,7 @@ Get your API keys from the [Runpod Console](https://console.runpod.io/user/setti
 # Required for volume operations
 export RUNPOD_API_KEY="rpa_your_api_key_here"
 
-# Required for file operations  
+# Required for file operations
 export RUNPOD_S3_ACCESS_KEY="user_your_s3_access_key"
 export RUNPOD_S3_SECRET_KEY="rps_your_s3_secret_key"
 ```
@@ -288,8 +288,8 @@ print(f"Expanded to: {expanded['size']} GB")
 
 # Update both name and size
 updated = api.update_volume(
-    volume['id'], 
-    name="large-project-storage", 
+    volume['id'],
+    name="large-project-storage",
     size=200
 )
 print(f"Updated: {updated['name']} - {updated['size']} GB")
@@ -319,7 +319,7 @@ api.upload_directory(
     "volume-id",             # Target volume
     "backup/my_project/",    # Remote path
     exclude_patterns=[       # Skip these files
-        "*.log", "*.tmp", "node_modules/*", 
+        "*.log", "*.tmp", "node_modules/*",
         ".git/*", "__pycache__/*"
     ],
     delete=True,             # Remove remote files not in local
@@ -331,7 +331,7 @@ def download_callback(current, total, filename):
     print(f"[{current}/{total}] Downloaded: {filename}")
 
 api.download_directory(
-    "volume-id", 
+    "volume-id",
     "backup/my_project/",    # Remote directory
     "restored_project/",     # Local destination
     progress_callback=download_callback
@@ -406,7 +406,7 @@ print("\nFiles in volume:")
 files = api.list_files(volume_id)
 for file_info in files:
     print(f"  {file_info['key']} ({file_info['size']} bytes)")
-    
+
     # Download file
     local_name = f"downloaded_{file_info['key'].replace('/', '_')}"
     api.download_file(volume_id, file_info['key'], local_name)
@@ -425,13 +425,13 @@ api = RunpodStorageAPI()
 def upload_with_progress(local_path, volume_id, remote_path):
     file_size = os.path.getsize(local_path)
     print(f"Uploading {file_size / (1024**3):.2f} GB file...")
-    
+
     start_time = time.time()
-    
+
     # Use 100MB chunks for large files
     chunk_size = 100 * 1024 * 1024
     api.upload_file(local_path, volume_id, remote_path, chunk_size)
-    
+
     elapsed = time.time() - start_time
     speed = (file_size / (1024**2)) / elapsed  # MB/s
     print(f"✓ Upload completed in {elapsed:.1f}s ({speed:.1f} MB/s)")
@@ -443,8 +443,8 @@ upload_with_progress("large_dataset.zip", volume_id, "data/large_dataset.zip")
 
 ```python
 from runpod_storage import (
-    RunpodStorageAPI, 
-    VolumeNotFoundError, 
+    RunpodStorageAPI,
+    VolumeNotFoundError,
     InsufficientStorageError,
     AuthenticationError
 )
@@ -491,7 +491,7 @@ services:
       - "8000:8000"
     environment:
       - RUNPOD_API_KEY=${RUNPOD_API_KEY}
-      - RUNPOD_S3_ACCESS_KEY=${RUNPOD_S3_ACCESS_KEY}  
+      - RUNPOD_S3_ACCESS_KEY=${RUNPOD_S3_ACCESS_KEY}
       - RUNPOD_S3_SECRET_KEY=${RUNPOD_S3_SECRET_KEY}
     volumes:
       - ./logs:/app/logs
@@ -624,7 +624,7 @@ api.upload_directory(
     "remote_path/",
     # Use more aggressive exclusions
     exclude_patterns=[
-        "*.log", "*.tmp", "node_modules/*", ".git/*", 
+        "*.log", "*.tmp", "node_modules/*", ".git/*",
         "*.pyc", "__pycache__/*", ".DS_Store", "*.cache"
     ]
 )
@@ -635,7 +635,7 @@ api.upload_directory(
 def detailed_progress(current, total, filename):
     percent = (current / total) * 100
     print(f"[{current:4d}/{total:4d}] {percent:6.2f}% - {filename}")
-    
+
     # Log to file for large transfers
     with open("transfer.log", "a") as f:
         f.write(f"{filename} - {percent:.2f}%\n")

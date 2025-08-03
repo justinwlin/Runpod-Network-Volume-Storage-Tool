@@ -4,47 +4,47 @@ info:
   version: 2.0.0
   description: |
     Complete OpenAPI specification for Runpod Network Storage management.
-    
+
     This API provides comprehensive access to Runpod storage operations including:
     - Network volume management (create, list, update, delete)
     - File operations (upload, download, list, delete via S3-compatible API)
     - Directory synchronization with progress tracking
     - Interactive file browser capabilities
-    
+
     ## Base URL
-    
+
     All API endpoints are relative to: `https://rest.runpod.io/v1`
-    
+
     ## Authentication
-    
+
     All endpoints require authentication via Bearer token:
     ```
     Authorization: Bearer rpa_your_api_key_here
     ```
-    
+
     Get your API key from [Runpod Console](https://console.runpod.io/user/settings).
-    
+
     ## Two Separate APIs
-    
+
     This specification covers **Volume Management** only. File operations use a separate API:
-    
+
     ### 1. Runpod REST API (This Spec)
     - **Base URL**: `https://rest.runpod.io/v1`
     - **Auth**: Bearer token (`RUNPOD_API_KEY`)
     - **Operations**: Create, list, update, delete volumes
-    
+
     ### 2. S3-Compatible File API (Separate)
     - **Endpoints**: `https://s3api-{datacenter}.runpod.io/`
     - **Auth**: AWS S3 credentials (`RUNPOD_S3_ACCESS_KEY` + `RUNPOD_S3_SECRET_KEY`)
     - **Operations**: Upload, download, list, delete files
     - **Protocol**: Standard AWS S3 API (use AWS SDK or boto3)
-    
+
     ## Volume Size Limits
-    
+
     - Minimum: 10 GB
     - Maximum: 4,000 GB (4 TB)
     - Updates: Can only increase size, never decrease
-    
+
   contact:
     name: Runpod Network Storage
     url: https://docs.runpod.io/serverless/storage/s3-api
@@ -159,7 +159,7 @@ paths:
       summary: Update a network volume
       description: |
         Update a network volume's name and/or size.
-        
+
         **Important**: Volume size can only be increased, never decreased.
       operationId: updateNetworkVolume
       tags:
@@ -204,7 +204,7 @@ paths:
       summary: Delete a network volume
       description: |
         Permanently delete a network volume and all its data.
-        
+
         **Warning**: This action is irreversible. All files and data will be permanently lost.
       operationId: deleteNetworkVolume
       tags:
@@ -229,7 +229,7 @@ components:
       bearerFormat: API_KEY
       description: |
         Runpod API key with 'rpa_' prefix.
-        
+
         Example: `Authorization: Bearer rpa_your_api_key_here`
 
   parameters:
@@ -273,7 +273,7 @@ components:
           enum:
             - "EUR-IS-1"
             - "EU-RO-1"
-            - "EU-CZ-1" 
+            - "EU-CZ-1"
             - "US-KS-2"
           example: "EU-RO-1"
 
@@ -445,16 +445,16 @@ tags:
   - name: Volume Management
     description: |
       Operations for managing Runpod network volumes.
-      
+
       Network volumes provide persistent storage that can be attached to pods
       and accessed via S3-compatible API for file operations.
-      
+
       **Supported Operations:**
       - Create volumes in different datacenters
       - List all volumes with details
       - Update volume names and expand storage
       - Delete volumes (with data loss warning)
-      
+
       **File Operations:**
       Use the S3-compatible API endpoints for file operations:
       - Upload/download files and directories

@@ -4,22 +4,22 @@ info:
   version: 1.0.0
   description: |
     Professional REST API for Runpod network storage management.
-    
+
     This API provides comprehensive access to Runpod storage operations including:
     - Network volume management (create, list, delete)
     - File operations (upload, download, list, delete)
     - Robust error handling and validation
     - OpenAPI 3.0 compliant documentation
-    
+
     ## Authentication
-    
+
     This API requires **TWO SEPARATE SETS OF CREDENTIALS**:
-    
+
     ### 1. Volume Management Operations
     **Required for**: Create, list, get, update, delete volumes
     - **Header**: `Authorization: Bearer rpa_your_api_key`
     - **Get from**: [Runpod Console](https://console.runpod.io/user/settings) → API Keys
-    
+
     ### 2. File Operations (Upload, Download, List Files, Delete Files)
     **Required for**: All file operations within volumes
     - **Header**: `Authorization: Bearer rpa_your_api_key` (same as above)
@@ -27,18 +27,18 @@ info:
       - `s3_access_key`: S3 access key (starts with `user_`)
       - `s3_secret_key`: S3 secret key (starts with `rps_`)
     - **Get from**: [Runpod Console](https://console.runpod.io/user/settings) → S3 API Keys
-    
+
     ### Important Notes:
     - File operations require S3 credentials in the request body
     - Volume operations only need the API key
     - Both credential types are obtained from the same console but are different keys
-    
+
     ## Rate Limiting
-    
+
     API requests are subject to rate limiting. See response headers for current limits.
-    
+
     ## SDKs and Tools
-    
+
     - **Python SDK**: `pip install runpod-storage`
     - **CLI Tool**: `runpod-storage --help`
     - **Docker Image**: `docker run runpod/storage-api`
@@ -212,7 +212,7 @@ paths:
       summary: List files in volume
       description: |
         List all files in a network volume, optionally filtered by prefix.
-        
+
         **Important**: Requires S3 credentials configured on server.
       tags:
         - Files
@@ -247,11 +247,11 @@ paths:
       summary: Upload file
       description: |
         Upload a file to a network volume. Supports large files via multipart upload.
-        
+
         **Important**: This endpoint requires BOTH:
         1. API key via Authorization header
         2. S3 credentials (RUNPOD_S3_ACCESS_KEY + RUNPOD_S3_SECRET_KEY) as server environment variables
-        
+
         The server will return a 500 error if S3 credentials are not configured.
       tags:
         - Files
@@ -315,7 +315,7 @@ paths:
       summary: Download file
       description: |
         Download a file from a network volume.
-        
+
         **Important**: Requires S3 credentials configured on server.
       tags:
         - Files
