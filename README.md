@@ -58,8 +58,8 @@ I validated the basics for my use-case, if you find bugs feel free make a PR req
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/runpod-storage.git
-cd runpod-storage
+git clone https://github.com/justinwlin/Runpod-Network-Volume-Storage-Tool.git
+cd Runpod-Network-Volume-Storage-Tool
 
 # Install with uv (recommended)
 uv sync
