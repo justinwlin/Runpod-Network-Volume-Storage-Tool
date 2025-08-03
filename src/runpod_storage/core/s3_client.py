@@ -1,5 +1,6 @@
 """S3-compatible client for Runpod network volume file operations."""
 
+import hashlib
 import logging
 import math
 import os
@@ -114,6 +115,7 @@ class RunpodS3Client:
         volume_id: str,
         remote_path: str,
         chunk_size: int = 50 * 1024 * 1024,  # 50MB
+        enable_resume: bool = True,
     ) -> bool:
         """Upload a file to network volume.
 
@@ -122,6 +124,7 @@ class RunpodS3Client:
             volume_id: Network volume ID
             remote_path: Remote file path in volume
             chunk_size: Size of chunks for multipart upload
+            enable_resume: Enable resume capability for interrupted uploads
 
         Returns:
             True if successful
@@ -142,7 +145,7 @@ class RunpodS3Client:
             return self._simple_upload(str(local_path), volume_id, remote_path)
         else:
             return self._multipart_upload(
-                str(local_path), volume_id, remote_path, chunk_size
+                str(local_path), volume_id, remote_path, chunk_size, enable_resume
             )
 
     def upload_directory(
@@ -377,6 +380,48 @@ class RunpodS3Client:
             logger.error(f"Failed to delete file: {e}")
             raise
 
+    def cleanup_abandoned_uploads(self, volume_id: str, max_age_hours: int = 24) -> int:
+        """Clean up abandoned multipart uploads for a volume.
+        
+        Args:
+            volume_id: Network volume ID
+            max_age_hours: Maximum age in hours for uploads to keep
+            
+        Returns:
+            Number of uploads cleaned up
+        """
+        try:
+            import datetime
+            
+            cutoff_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=max_age_hours)
+            cleaned_count = 0
+            
+            paginator = self.s3.get_paginator("list_multipart_uploads")
+            for page in paginator.paginate(Bucket=volume_id):
+                for upload in page.get("Uploads", []):
+                    initiated = upload["Initiated"]
+                    if initiated < cutoff_time:
+                        upload_id = upload["UploadId"]
+                        key = upload["Key"]
+                        try:
+                            self.s3.abort_multipart_upload(
+                                Bucket=volume_id,
+                                Key=key,
+                                UploadId=upload_id
+                            )
+                            logger.info(f"Cleaned up abandoned upload: {key} ({upload_id})")
+                            cleaned_count += 1
+                        except Exception as e:
+                            logger.warning(f"Failed to clean up upload {upload_id}: {e}")
+                            
+            if cleaned_count > 0:
+                logger.info(f"Cleaned up {cleaned_count} abandoned uploads from {volume_id}")
+            return cleaned_count
+            
+        except Exception as e:
+            logger.warning(f"Error during cleanup: {e}")
+            return 0
+
     def _simple_upload(self, local_path: str, volume_id: str, remote_path: str) -> bool:
         """Upload a file using simple upload."""
         try:
@@ -389,7 +434,7 @@ class RunpodS3Client:
             raise
 
     def _multipart_upload(
-        self, local_path: str, volume_id: str, remote_path: str, chunk_size: int
+        self, local_path: str, volume_id: str, remote_path: str, chunk_size: int, enable_resume: bool = True
     ) -> bool:
         """Upload a large file using multipart upload with the robust implementation."""
         try:
@@ -403,6 +448,7 @@ class RunpodS3Client:
                 endpoint=self.endpoint_url,
                 part_size=chunk_size,
                 max_retries=self.max_retries,
+                enable_resume=enable_resume,
             )
             uploader.upload()
             return True
@@ -426,6 +472,7 @@ class LargeMultipartUploader:
         endpoint: str,
         part_size: int = 50 * 1024 * 1024,
         max_retries: int = 5,
+        enable_resume: bool = True,
     ) -> None:
         self.file_path = file_path
         self.bucket = bucket
@@ -436,6 +483,7 @@ class LargeMultipartUploader:
         self.endpoint = endpoint
         self.part_size = part_size
         self.max_retries = max_retries
+        self.enable_resume = enable_resume
 
         self.progress_lock = Lock()
         self.parts_completed = 0
@@ -453,6 +501,8 @@ class LargeMultipartUploader:
             "s3", config=self.botocore_cfg, endpoint_url=self.endpoint
         )
         self.upload_id: Optional[str] = None
+        self.file_hash: Optional[str] = None
+        self.existing_parts: Dict[int, str] = {}  # part_number -> etag
 
     @staticmethod
     def human_mb_per_s(num_bytes: int, seconds: float) -> float:
@@ -482,6 +532,138 @@ class LargeMultipartUploader:
             err = exc.response.get("Error", {})
             return err.get("Code") == "NoSuchUpload"
         return False
+
+    def calculate_file_hash(self) -> str:
+        """Calculate MD5 hash of the file for resume verification."""
+        if self.file_hash is not None:
+            return self.file_hash
+            
+        logger.info("Calculating file hash for resume verification...")
+        hash_md5 = hashlib.md5()
+        with open(self.file_path, "rb") as f:
+            # Read in chunks to handle large files efficiently
+            for chunk in iter(lambda: f.read(8192), b""):
+                hash_md5.update(chunk)
+        
+        self.file_hash = hash_md5.hexdigest()
+        logger.info(f"File hash calculated: {self.file_hash}")
+        return self.file_hash
+
+    def find_existing_upload(self) -> Optional[str]:
+        """Find existing multipart upload for this file that can be resumed."""
+        try:
+            file_hash = self.calculate_file_hash()
+            logger.info(f"Looking for existing uploads for key: {self.key}")
+            
+            # List all multipart uploads for this key
+            paginator = self.s3.get_paginator("list_multipart_uploads")
+            upload_count = 0
+            
+            # Try without prefix first, then filter manually
+            for page in paginator.paginate(Bucket=self.bucket):
+                uploads = page.get("Uploads", [])
+                upload_count += len(uploads)
+                logger.info(f"Found {len(uploads)} uploads in this page")
+                
+                for upload in uploads:
+                    upload_key = upload["Key"]
+                    logger.info(f"Checking upload: {upload_key} == {self.key}?")
+                    
+                    # Handle both with and without leading slash
+                    if (upload_key == self.key or 
+                        upload_key == f"/{self.key}" or 
+                        upload_key.lstrip("/") == self.key.lstrip("/")):
+                        upload_id = upload["UploadId"]
+                        logger.info(f"Found matching key upload: {upload_id}")
+                        
+                        # Check if this upload has metadata that matches our file
+                        if self.verify_upload_compatibility(upload_id, file_hash):
+                            logger.info(f"Found resumable upload: {upload_id}")
+                            return upload_id
+                        else:
+                            logger.info(f"Upload {upload_id} not compatible")
+            
+            logger.info(f"Total uploads found: {upload_count}, none resumable")
+                            
+        except Exception as e:
+            logger.warning(f"Error finding existing uploads: {e}")
+            
+        return None
+
+    def verify_upload_compatibility(self, upload_id: str, file_hash: str) -> bool:
+        """Verify if an existing upload is compatible with current file."""
+        try:
+            logger.info(f"Verifying compatibility for upload {upload_id}")
+            
+            # Get upload metadata (if we stored hash in metadata)
+            # For now, we'll use a heuristic: check if parts exist and file size matches
+            parts = self.list_existing_parts(upload_id)
+            logger.info(f"Found {len(parts)} existing parts")
+            
+            if not parts:
+                logger.info("No parts found, not compatible")
+                return False
+                
+            # Calculate expected file size from parts
+            expected_size = 0
+            for part in parts:
+                part_size = part.get("Size", 0)
+                expected_size += part_size
+                logger.info(f"Part {part['PartNumber']}: {part_size} bytes")
+                
+            actual_size = os.path.getsize(self.file_path)
+            logger.info(f"Expected size from parts: {expected_size}, actual file size: {actual_size}")
+            
+            # If sizes are close (within part_size), consider it compatible
+            # This is a heuristic since we can't store hash in S3 metadata easily
+            size_diff = abs(expected_size - actual_size)
+            logger.info(f"Size difference: {size_diff} bytes (tolerance: {self.part_size})")
+            
+            if size_diff <= self.part_size:
+                logger.info(f"Upload appears compatible (size diff: {size_diff} bytes)")
+                return True
+            else:
+                logger.info(f"Upload not compatible: size difference {size_diff} > {self.part_size}")
+                
+        except Exception as e:
+            logger.warning(f"Error verifying upload compatibility: {e}")
+            
+        return False
+
+    def list_existing_parts(self, upload_id: str) -> List[Dict]:
+        """List parts that have already been uploaded."""
+        try:
+            paginator = self.s3.get_paginator("list_parts")
+            parts = []
+            for page in paginator.paginate(
+                Bucket=self.bucket, Key=self.key, UploadId=upload_id
+            ):
+                parts.extend(page.get("Parts", []))
+            return parts
+        except Exception as e:
+            logger.warning(f"Error listing existing parts: {e}")
+            return []
+
+    def load_existing_parts(self, upload_id: str) -> None:
+        """Load information about parts that have already been uploaded."""
+        existing_parts = self.list_existing_parts(upload_id)
+        self.existing_parts = {}
+        
+        for part in existing_parts:
+            part_number = part["PartNumber"]
+            etag = part["ETag"]
+            self.existing_parts[part_number] = etag
+            
+        logger.info(f"Found {len(self.existing_parts)} existing parts to resume from")
+
+    def is_part_uploaded(self, part_number: int) -> bool:
+        """Check if a specific part has already been uploaded."""
+        return part_number in self.existing_parts
+
+    def get_existing_part_etag(self, part_number: int) -> Optional[str]:
+        """Get the ETag of an existing part."""
+        return self.existing_parts.get(part_number)
+
 
     def call_with_524_retry(self, description: str, func):
         """Call ``func`` retrying on HTTP 524 or timeout errors."""
@@ -658,7 +840,7 @@ class LargeMultipartUploader:
                 time.sleep(backoff)
 
     def upload(self) -> None:
-        """Execute the multipart upload."""
+        """Execute the multipart upload with resume capability."""
         logger.info(
             f"Uploading to region: {self.region}; bucket: {self.bucket}; key: {self.key}"
         )
@@ -674,18 +856,40 @@ class LargeMultipartUploader:
         file_gb = file_size / float(1024**3)
         completion_timeout = max(60, int(math.ceil(file_gb) * 5))
 
-        resp = self.call_with_524_retry(
-            "create_multipart_upload",
-            lambda: self.s3.create_multipart_upload(Bucket=self.bucket, Key=self.key),
-        )
-        self.upload_id = resp["UploadId"]
-        logger.info(f"Initiated multipart upload: UploadId={self.upload_id}")
+        # Try to find and resume existing upload if enabled
+        existing_upload_id = None
+        if self.enable_resume:
+            existing_upload_id = self.find_existing_upload()
+        
+        if existing_upload_id:
+            logger.info(f"Resuming existing upload: {existing_upload_id}")
+            self.upload_id = existing_upload_id
+            self.load_existing_parts(existing_upload_id)
+            # Update parts completed for progress tracking
+            self.parts_completed = len(self.existing_parts)
+            logger.info(f"Resuming from part {self.parts_completed + 1} of {total_parts}")
+        else:
+            # Create new multipart upload
+            resp = self.call_with_524_retry(
+                "create_multipart_upload",
+                lambda: self.s3.create_multipart_upload(Bucket=self.bucket, Key=self.key),
+            )
+            self.upload_id = resp["UploadId"]
+            logger.info(f"Initiated new multipart upload: UploadId={self.upload_id}")
 
-        parts: List[dict] = []
+        # Track parts uploaded in this session (not including existing ones)
+        new_parts: List[dict] = []
+        
         try:
             with ThreadPoolExecutor(max_workers=4) as executor:
                 futures = {}
+                
+                # Only upload parts that haven't been uploaded yet
                 for part_num in range(1, total_parts + 1):
+                    if self.is_part_uploaded(part_num):
+                        logger.info(f"Part {part_num}: already uploaded, skipping")
+                        continue
+                        
                     offset = (part_num - 1) * self.part_size
                     chunk_size = min(self.part_size, file_size - offset)
                     futures[
@@ -699,26 +903,36 @@ class LargeMultipartUploader:
                         )
                     ] = part_num
 
+                # Wait for new parts to complete
                 for fut in as_completed(futures):
                     part = fut.result()
-                    parts.append(part)
+                    new_parts.append(part)
 
-            def fetch_parts():
-                paginator = self.s3.get_paginator("list_parts")
-                found = []
-                for page in paginator.paginate(
-                    Bucket=self.bucket, Key=self.key, UploadId=self.upload_id
-                ):
-                    found.extend(page.get("Parts", []))
-                return found
+            # Combine existing and new parts for completion
+            all_parts = []
+            
+            # Add existing parts
+            for part_number, etag in self.existing_parts.items():
+                all_parts.append({"PartNumber": part_number, "ETag": etag})
+            
+            # Add newly uploaded parts
+            all_parts.extend(new_parts)
+            
+            # Verify all parts are present
+            parts_by_number = {p["PartNumber"]: p for p in all_parts}
+            logger.info(f"Total parts available: {sorted(parts_by_number.keys())}")
+            logger.info(f"Existing parts: {sorted(self.existing_parts.keys())}")
+            logger.info(f"New parts: {sorted([p['PartNumber'] for p in new_parts])}")
+            
+            if len(parts_by_number) != total_parts:
+                missing_parts = set(range(1, total_parts + 1)) - set(parts_by_number.keys())
+                logger.error(f"Parts incomplete: {len(parts_by_number)} of {total_parts}. Missing: {sorted(missing_parts)}")
+                raise RuntimeError(
+                    f"Expected {total_parts} parts but have {len(parts_by_number)}. "
+                    f"Missing parts: {sorted(missing_parts)}"
+                )
 
-            seen = self.call_with_524_retry("list_parts", fetch_parts)
-            logger.info(f"Verified {len(seen)} of {total_parts} parts uploaded")
-
-            if len(seen) != total_parts:
-                raise RuntimeError(f"Expected {total_parts} parts but saw {len(seen)}")
-
-            parts_sorted = sorted(parts, key=lambda x: x["PartNumber"])
+            parts_sorted = sorted(all_parts, key=lambda x: x["PartNumber"])
             logger.info("Sending complete_multipart_upload request")
             self.complete_with_timeout_retry(
                 parts_sorted=parts_sorted,
@@ -745,7 +959,11 @@ class LargeMultipartUploader:
         except Exception as exc:
             logger.error(f"Upload interrupted: {exc}")
             if self.upload_id:
-                logger.info(f"UploadId {self.upload_id} left open for resumption")
+                completed_parts = len(self.existing_parts) + len(new_parts)
+                logger.info(
+                    f"UploadId {self.upload_id} left open for resumption. "
+                    f"Progress: {completed_parts}/{total_parts} parts uploaded"
+                )
             raise
 
         elapsed = time.time() - start_time

@@ -301,8 +301,13 @@ def list_files(ctx, volume_id, path):
     default=50 * 1024 * 1024,
     help="Chunk size for large files (default: 50MB)",
 )
+@click.option(
+    "--no-resume",
+    is_flag=True,
+    help="Disable resume capability for interrupted uploads",
+)
 @click.pass_context
-def upload(ctx, local_path, volume_id, remote_path, chunk_size):
+def upload(ctx, local_path, volume_id, remote_path, chunk_size, no_resume):
     """Upload a file to a network volume."""
     try:
         # Get API key interactively if not provided
@@ -343,7 +348,8 @@ def upload(ctx, local_path, volume_id, remote_path, chunk_size):
         console.print(
             f"Uploading [cyan]{local_path}[/cyan] to [green]{volume_id}/{remote_path}[/green]"
         )
-        s3_client.upload_file(local_path, volume_id, remote_path, chunk_size)
+        enable_resume = not no_resume
+        s3_client.upload_file(local_path, volume_id, remote_path, chunk_size, enable_resume)
         console.print("[green]✓[/green] Upload completed successfully!")
 
     except Exception as e:
