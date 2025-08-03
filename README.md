@@ -12,8 +12,6 @@ I validated the basics for my use-case, if you find bugs feel free make a PR req
 
 **Runpod Network Storage CLI, SDK, and API server for Runpod network storage management.**
 
-Runpod Storage provides a comprehensive suite of tools for managing Runpod network volumes and files with enterprise-grade reliability, performance, and developer experience.
-
 ## ✨ Features
 
 - 🎯 **Multi-Interface Access**: CLI, Python SDK, and REST API server
