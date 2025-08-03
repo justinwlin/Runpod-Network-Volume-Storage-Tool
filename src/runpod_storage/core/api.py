@@ -92,6 +92,24 @@ class RunpodStorageAPI:
                 raise VolumeNotFoundError(volume_id)
             raise
     
+    def update_volume(
+        self, 
+        volume_id: str, 
+        name: Optional[str] = None, 
+        size: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Update a volume's name and/or size.
+        
+        Args:
+            volume_id: Volume ID to update
+            name: New name (optional)
+            size: New size in GB (must be larger than current, optional)
+            
+        Returns:
+            Updated volume information
+        """
+        return self.client.update_network_volume(volume_id, name, size)
+    
     def delete_volume(self, volume_id: str) -> bool:
         """Delete a volume."""
         return self.client.delete_network_volume(volume_id)
