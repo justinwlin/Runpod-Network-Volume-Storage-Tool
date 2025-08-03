@@ -428,15 +428,17 @@ def interactive(ctx):
             console.print("\n[bold]Runpod Storage Manager[/bold]")
             console.print("1. List volumes")
             console.print("2. Create volume")
-            console.print("3. List files")
-            console.print("4. Upload file/directory")
-            console.print("5. Download file/directory")
-            console.print("6. Browse volume files")
-            console.print("7. Exit")
+            console.print("3. Update volume")
+            console.print("4. Delete volume")
+            console.print("5. List files")
+            console.print("6. Upload file/directory")
+            console.print("7. Download file/directory")
+            console.print("8. Browse volume files")
+            console.print("9. Exit")
             
             choice = Prompt.ask(
                 "Choose action",
-                choices=["1", "2", "3", "4", "5", "6", "7"],
+                choices=["1", "2", "3", "4", "5", "6", "7", "8", "9"],
                 default="1"
             )
             
@@ -453,18 +455,22 @@ def interactive(ctx):
                 )
                 _interactive_create_volume(ctx.obj["api_key"], name, size, datacenter)
             elif choice == "3":
-                _interactive_list_files(ctx.obj["api_key"], ctx.obj)
+                _interactive_update_volume(ctx.obj["api_key"])
             elif choice == "4":
+                _interactive_delete_volume(ctx.obj["api_key"])
+            elif choice == "5":
+                _interactive_list_files(ctx.obj["api_key"], ctx.obj)
+            elif choice == "6":
                 local_path = Prompt.ask("Local file/directory path")
                 if not Path(local_path).exists():
                     console.print("[red]Path not found![/red]")
                     continue
                 _interactive_upload(ctx.obj["api_key"], local_path, ctx.obj)
-            elif choice == "5":
-                _interactive_download(ctx.obj["api_key"], ctx.obj)
-            elif choice == "6":
-                _interactive_browse_files(ctx.obj["api_key"], ctx.obj)
             elif choice == "7":
+                _interactive_download(ctx.obj["api_key"], ctx.obj)
+            elif choice == "8":
+                _interactive_browse_files(ctx.obj["api_key"], ctx.obj)
+            elif choice == "9":
                 console.print("Goodbye!")
                 break
             
@@ -561,6 +567,189 @@ def _interactive_create_volume(api_key, name, size, datacenter):
         console.print(f"  Name: {volume['name']}")
         console.print(f"  Size: {volume['size']} GB")
         console.print(f"  Datacenter: {volume['dataCenterId']}")
+        
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+
+
+def _interactive_update_volume(api_key):
+    """Internal function to update volume without re-prompting for API key."""
+    try:
+        client = RunpodClient(api_key)
+        
+        # Get list of volumes
+        volumes = client.list_network_volumes()
+        if not volumes:
+            console.print("[yellow]No network volumes found.[/yellow]")
+            return
+        
+        console.print("Available volumes:")
+        for i, vol in enumerate(volumes):
+            console.print(f"  {i+1}. {vol['id']} ({vol.get('name', 'Unnamed')}) - {vol.get('size', 'Unknown')} GB")
+        
+        choice = Prompt.ask(
+            "Select volume to update",
+            choices=[str(i+1) for i in range(len(volumes))],
+            default="1"
+        )
+        volume_to_update = volumes[int(choice)-1]
+        
+        # Show current volume details
+        console.print(f"\n[bold]Current volume details:[/bold]")
+        console.print(f"  ID: {volume_to_update['id']}")
+        console.print(f"  Name: {volume_to_update.get('name', 'Unnamed')}")
+        console.print(f"  Size: {volume_to_update.get('size', 'Unknown')} GB")
+        console.print(f"  Datacenter: {volume_to_update.get('dataCenterId', 'Unknown')}")
+        
+        # Ask what to update
+        console.print(f"\n[bold]What would you like to update?[/bold]")
+        console.print("1. Name only")
+        console.print("2. Size only (expand)")
+        console.print("3. Both name and size")
+        
+        update_choice = Prompt.ask(
+            "Choose update type",
+            choices=["1", "2", "3"],
+            default="1"
+        )
+        
+        new_name = None
+        new_size = None
+        
+        if update_choice in ["1", "3"]:
+            current_name = volume_to_update.get('name', 'Unnamed')
+            new_name = Prompt.ask(f"New volume name", default=current_name)
+            if new_name == current_name:
+                new_name = None  # No change
+        
+        if update_choice in ["2", "3"]:
+            current_size = volume_to_update.get('size', 0)
+            console.print(f"\n[yellow]⚠️  Note: Size can only be increased, not decreased![/yellow]")
+            console.print(f"Current size: {current_size} GB")
+            
+            while True:
+                try:
+                    new_size_input = Prompt.ask(f"New size in GB (minimum {current_size + 1})")
+                    new_size = int(new_size_input)
+                    
+                    if new_size <= current_size:
+                        console.print(f"[red]Error: New size ({new_size} GB) must be larger than current size ({current_size} GB)[/red]")
+                        continue
+                    
+                    if new_size > 4000:
+                        console.print(f"[red]Error: Maximum volume size is 4000 GB[/red]")
+                        continue
+                    
+                    break
+                except ValueError:
+                    console.print(f"[red]Error: Please enter a valid number[/red]")
+        
+        # Show update summary
+        if new_name is None and new_size is None:
+            console.print("[yellow]No changes to apply.[/yellow]")
+            return
+        
+        console.print(f"\n[bold]Update summary:[/bold]")
+        if new_name:
+            console.print(f"  Name: {volume_to_update.get('name', 'Unnamed')} → {new_name}")
+        if new_size:
+            console.print(f"  Size: {volume_to_update.get('size', 'Unknown')} GB → {new_size} GB")
+        
+        # Confirm update
+        if not Confirm.ask(f"\nProceed with update?", default=True):
+            console.print("[yellow]Update cancelled.[/yellow]")
+            return
+        
+        # Perform update
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Updating network volume...", total=None)
+            updated_volume = client.update_network_volume(
+                volume_to_update['id'], 
+                name=new_name, 
+                size=new_size
+            )
+            progress.update(task, completed=1)
+        
+        console.print(f"[green]✓[/green] Volume updated successfully:")
+        console.print(f"  ID: {updated_volume['id']}")
+        console.print(f"  Name: {updated_volume['name']}")
+        console.print(f"  Size: {updated_volume['size']} GB")
+        console.print(f"  Datacenter: {updated_volume['dataCenterId']}")
+        
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+
+
+def _interactive_delete_volume(api_key):
+    """Internal function to delete volume without re-prompting for API key."""
+    try:
+        client = RunpodClient(api_key)
+        
+        # Get list of volumes
+        volumes = client.list_network_volumes()
+        if not volumes:
+            console.print("[yellow]No network volumes found.[/yellow]")
+            return
+        
+        console.print("Available volumes:")
+        for i, vol in enumerate(volumes):
+            console.print(f"  {i+1}. {vol['id']} ({vol.get('name', 'Unnamed')}) - {vol.get('size', 'Unknown')} GB")
+        
+        choice = Prompt.ask(
+            "Select volume to delete",
+            choices=[str(i+1) for i in range(len(volumes))],
+            default="1"
+        )
+        volume_to_delete = volumes[int(choice)-1]
+        
+        # Show volume details and get confirmation
+        console.print(f"\n[bold red]⚠️  WARNING: You are about to delete volume:[/bold red]")
+        console.print(f"  ID: {volume_to_delete['id']}")
+        console.print(f"  Name: {volume_to_delete.get('name', 'Unnamed')}")
+        console.print(f"  Size: {volume_to_delete.get('size', 'Unknown')} GB")
+        console.print(f"  Datacenter: {volume_to_delete.get('dataCenterId', 'Unknown')}")
+        
+        console.print(f"\n[bold red]🚨 This action is IRREVERSIBLE![/bold red]")
+        console.print(f"[red]All files and data in this volume will be permanently lost.[/red]")
+        
+        # Double confirmation
+        first_confirm = Confirm.ask(
+            f"\nAre you sure you want to delete volume {volume_to_delete['id']}?",
+            default=False
+        )
+        
+        if not first_confirm:
+            console.print("[yellow]Volume deletion cancelled.[/yellow]")
+            return
+        
+        # Type volume ID for final confirmation
+        volume_id = volume_to_delete['id']
+        typed_id = Prompt.ask(
+            f"\nTo confirm, please type the volume ID exactly: [bold]{volume_id}[/bold]"
+        )
+        
+        if typed_id != volume_id:
+            console.print("[red]Volume ID does not match. Deletion cancelled.[/red]")
+            return
+        
+        # Delete the volume
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Deleting network volume...", total=None)
+            success = client.delete_network_volume(volume_id)
+            progress.update(task, completed=1)
+        
+        if success:
+            console.print(f"[green]✓[/green] Network volume {volume_id} deleted successfully.")
+        else:
+            console.print(f"[red]Failed to delete volume {volume_id}. It may not exist.[/red]")
         
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")

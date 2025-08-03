@@ -11,6 +11,7 @@ Runpod Storage provides a comprehensive suite of tools for managing Runpod netwo
 - 🎯 **Multi-Interface Access**: CLI, Python SDK, and REST API server
 - 📁 **Directory Sync**: AWS S3-like directory upload/download with progress tracking
 - 🗂️ **Interactive File Browser**: Navigate and manage files like a desktop file manager
+- 🔧 **Complete Volume Management**: Create, update (resize/rename), and delete volumes
 - 🚀 **High Performance**: Robust multipart uploads with retry logic and concurrent transfers
 - 🔒 **Enterprise Security**: Comprehensive authentication and error handling
 - 📚 **OpenAPI Compliant**: Full OpenAPI 3.0 specification with auto-generated docs
@@ -18,6 +19,7 @@ Runpod Storage provides a comprehensive suite of tools for managing Runpod netwo
 - 📖 **Comprehensive Docs**: Extensive documentation with examples and tutorials
 - ⚡ **Zero Config**: Works out of the box with sensible defaults
 - 🎛️ **Smart Exclusions**: Automatically exclude system files (.DS_Store, .git, __pycache__)
+- 🛡️ **Safety First**: Multiple confirmations for destructive operations
 
 ## 🏗️ Architecture
 
@@ -107,6 +109,14 @@ print(f"Found {len(volumes)} volumes")
 volume = api.create_volume("my-storage", 50, "EU-RO-1")
 print(f"Created volume: {volume['id']}")
 
+# Update a volume (rename and/or expand size)
+updated_volume = api.update_volume(volume['id'], name="renamed-storage", size=100)
+print(f"Updated volume: {updated_volume['name']} - {updated_volume['size']} GB")
+
+# Delete a volume (careful - this is irreversible!)
+api.delete_volume(volume['id'])
+print("Volume deleted")
+
 # Upload a single file
 api.upload_file("local_file.txt", volume['id'], "remote_file.txt")
 
@@ -155,6 +165,7 @@ Visit `http://localhost:8000/docs` for interactive API documentation.
 
 ### 📖 Examples
 - [**Basic Usage**](examples/basic_usage.py) - Python SDK examples
+- [**Volume Management**](examples/volume_management.py) - Create, update, and delete volumes
 - [**Directory Sync**](examples/directory_sync.py) - Upload/download directories with progress tracking
 - [**File Browser CLI**](examples/file_browser_cli.py) - Programmatic file browser implementation
 - [**Server Integration**](examples/server_example.py) - REST API client examples
@@ -218,12 +229,24 @@ Features:
 - 🗑️ Delete files with confirmation prompts
 - 🔍 Real-time directory listing
 
+### Complete Volume Management
+Full lifecycle management of network volumes:
+```bash
+# Interactive mode
+runpod-storage interactive
+
+# Volume operations:
+# 2. Create volume    - Create new volumes with size and datacenter selection
+# 3. Update volume    - Rename volumes or expand storage (size increase only)
+# 4. Delete volume    - Safely delete with multiple confirmations
+```
+
 ### Directory Sync (AWS S3-like)
 Upload and download entire directories with smart sync:
 ```bash
 # Interactive mode
 runpod-storage interactive
-# Choose option 4: Upload file/directory
+# Choose option 6: Upload file/directory
 
 # Automatically detects directories and offers:
 # - Progress tracking for each file
@@ -233,6 +256,46 @@ runpod-storage interactive
 ```
 
 ## 📊 Examples
+
+### Volume Management Operations
+
+```python
+from runpod_storage import RunpodStorageAPI
+
+api = RunpodStorageAPI()
+
+# Create a new volume
+volume = api.create_volume(
+    name="my-project-storage",
+    size=50,  # GB
+    datacenter="EU-RO-1"
+)
+print(f"Created volume: {volume['id']}")
+
+# Update volume name
+updated = api.update_volume(volume['id'], name="renamed-project-storage")
+print(f"Renamed to: {updated['name']}")
+
+# Expand volume size (only increases allowed)
+expanded = api.update_volume(volume['id'], size=100)  # Expand to 100GB
+print(f"Expanded to: {expanded['size']} GB")
+
+# Update both name and size
+updated = api.update_volume(
+    volume['id'], 
+    name="large-project-storage", 
+    size=200
+)
+print(f"Updated: {updated['name']} - {updated['size']} GB")
+
+# List all volumes with details
+volumes = api.list_volumes()
+for vol in volumes:
+    print(f"Volume: {vol['id']} ({vol['name']}) - {vol['size']} GB in {vol['dataCenterId']}")
+
+# Delete volume (be careful!)
+# api.delete_volume(volume['id'])  # Uncomment to actually delete
+```
 
 ### Directory Sync Operations
 
@@ -277,13 +340,15 @@ $ runpod-storage interactive
 Runpod Storage Manager
 1. List volumes
 2. Create volume
-3. List files
-4. Upload file/directory     ← Handles both files & directories
-5. Download file/directory   ← Handles both files & directories
-6. Browse volume files       ← NEW: Interactive file browser
-7. Exit
+3. Update volume            ← NEW: Rename or expand volume size
+4. Delete volume            ← NEW: Delete volume with confirmations
+5. List files
+6. Upload file/directory    ← Handles both files & directories
+7. Download file/directory  ← Handles both files & directories
+8. Browse volume files      ← Interactive file browser
+9. Exit
 
-Choose action [1/2/3/4/5/6/7] (1): 6
+Choose action [1/2/3/4/5/6/7/8/9] (1): 8
 
 File Browser - Volume: my-volume-id
 Current path: /
@@ -497,6 +562,23 @@ uv run runpod-storage-server
 
 ## 🔧 Troubleshooting
 
+### Volume Management Issues
+
+**"Cannot decrease volume size" error:**
+- ✅ Volume sizes can only be increased, never decreased
+- ✅ If you need less space, create a new smaller volume and migrate data
+- ✅ Use the update function with a size larger than current size
+
+**Volume deletion not working:**
+- ✅ Ensure the volume exists and you have permission to delete it
+- ✅ Use the interactive CLI for safe deletion with multiple confirmations
+- ✅ Check that no pods are currently using the volume
+
+**Volume update fails:**
+- ✅ Name updates: Ensure new name doesn't conflict (though duplicates are allowed)
+- ✅ Size updates: New size must be larger than current size
+- ✅ Check datacenter capacity if expanding to very large sizes
+
 ### Directory Upload Issues
 
 **"Path is a directory" error when using CLI:**
@@ -559,6 +641,11 @@ def detailed_progress(current, total, filename):
 - [x] Interactive file browser with navigation
 - [x] Concurrent uploads/downloads for performance
 - [x] Smart file exclusion patterns
+- [x] Complete volume management (create, update, delete)
+- [x] Volume expansion and renaming capabilities
+- [x] Safe deletion with multiple confirmations
 - [ ] Resume interrupted large file transfers
 - [ ] Web UI for file management
 - [ ] Multi-cloud storage support
+- [ ] Volume snapshots and backups
+- [ ] Automated backup scheduling

@@ -110,6 +110,36 @@ class RunpodClient:
         """Get details of a specific network volume."""
         return self._make_request("GET", f"/networkvolumes/{volume_id}")
     
+    def update_network_volume(
+        self, 
+        volume_id: str, 
+        name: Optional[str] = None, 
+        size: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Update a network volume.
+        
+        Args:
+            volume_id: ID of the network volume to update
+            name: New name for the volume (optional)
+            size: New size in GB (must be larger than current size, optional)
+            
+        Returns:
+            Updated network volume data
+        """
+        if size is not None and not (1 <= size <= 4000):
+            raise ValueError("Size must be between 1 and 4000 GB")
+        
+        data = {}
+        if name is not None:
+            data["name"] = name
+        if size is not None:
+            data["size"] = size
+            
+        if not data:
+            raise ValueError("Must specify at least name or size to update")
+        
+        return self._make_request("PATCH", f"/networkvolumes/{volume_id}", json=data)
+    
     def delete_network_volume(self, volume_id: str) -> bool:
         """Delete a network volume."""
         try:
