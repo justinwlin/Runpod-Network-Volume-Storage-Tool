@@ -131,6 +131,9 @@ class RunpodS3Client:
         if not local_path.exists():
             raise FileNotFoundError(f"Local file not found: {local_path}")
         
+        if local_path.is_dir():
+            raise ValueError(f"Path is a directory. Use upload_directory() for directory uploads: {local_path}")
+        
         file_size = local_path.stat().st_size
         
         # Use simple upload for small files, multipart for large files
@@ -140,6 +143,190 @@ class RunpodS3Client:
             return self._multipart_upload(
                 str(local_path), volume_id, remote_path, chunk_size
             )
+    
+    def upload_directory(
+        self,
+        local_dir: str,
+        volume_id: str,
+        remote_dir: str = "",
+        exclude_patterns: List[str] = None,
+        delete: bool = False,
+        progress_callback=None
+    ) -> bool:
+        """Upload a directory to network volume (sync functionality).
+        
+        Args:
+            local_dir: Local directory path
+            volume_id: Network volume ID
+            remote_dir: Remote directory path in volume (default: root)
+            exclude_patterns: List of glob patterns to exclude
+            delete: Delete remote files not present locally
+            progress_callback: Callback function for progress updates
+            
+        Returns:
+            True if successful
+        """
+        import fnmatch
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        local_dir = Path(local_dir)
+        if not local_dir.exists():
+            raise FileNotFoundError(f"Local directory not found: {local_dir}")
+        
+        if not local_dir.is_dir():
+            raise ValueError(f"Path is not a directory: {local_dir}")
+        
+        exclude_patterns = exclude_patterns or []
+        
+        # Get all local files
+        local_files = []
+        for file_path in local_dir.rglob('*'):
+            if file_path.is_file():
+                relative_path = file_path.relative_to(local_dir)
+                
+                # Check exclude patterns
+                excluded = False
+                for pattern in exclude_patterns:
+                    if fnmatch.fnmatch(str(relative_path), pattern):
+                        excluded = True
+                        break
+                
+                if not excluded:
+                    remote_file_path = str(Path(remote_dir) / relative_path).replace('\\', '/')
+                    local_files.append((str(file_path), remote_file_path))
+        
+        # Get existing remote files if delete is enabled
+        remote_files = set()
+        if delete:
+            try:
+                existing_files = self.list_files(volume_id, remote_dir)
+                remote_files = {f["key"] for f in existing_files}
+            except Exception as e:
+                logger.warning(f"Could not list remote files for deletion: {e}")
+        
+        total_files = len(local_files)
+        uploaded_files = 0
+        failed_files = []
+        
+        logger.info(f"Starting directory upload: {total_files} files")
+        
+        # Upload files with threading
+        def upload_single_file(file_info):
+            local_file, remote_file = file_info
+            try:
+                self.upload_file(local_file, volume_id, remote_file)
+                return True, remote_file
+            except Exception as e:
+                logger.error(f"Failed to upload {local_file}: {e}")
+                return False, remote_file
+        
+        # Use ThreadPoolExecutor for concurrent uploads
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {executor.submit(upload_single_file, file_info): file_info for file_info in local_files}
+            
+            for future in as_completed(futures):
+                success, remote_file = future.result()
+                uploaded_files += 1
+                
+                if success:
+                    remote_files.discard(remote_file)  # Remove from deletion list
+                    if progress_callback:
+                        progress_callback(uploaded_files, total_files, remote_file)
+                    logger.info(f"Uploaded ({uploaded_files}/{total_files}): {remote_file}")
+                else:
+                    failed_files.append(remote_file)
+        
+        # Delete remote files not present locally
+        if delete and remote_files:
+            logger.info(f"Deleting {len(remote_files)} remote files not present locally")
+            for remote_file in remote_files:
+                try:
+                    self.delete_file(volume_id, remote_file)
+                    logger.info(f"Deleted: {remote_file}")
+                except Exception as e:
+                    logger.error(f"Failed to delete {remote_file}: {e}")
+        
+        if failed_files:
+            logger.error(f"Failed to upload {len(failed_files)} files: {failed_files}")
+            return False
+        
+        logger.info(f"Directory upload completed: {uploaded_files} files uploaded")
+        return True
+    
+    def download_directory(
+        self,
+        volume_id: str,
+        remote_dir: str,
+        local_dir: str,
+        progress_callback=None
+    ) -> bool:
+        """Download a directory from network volume.
+        
+        Args:
+            volume_id: Network volume ID
+            remote_dir: Remote directory path in volume
+            local_dir: Local directory path to download to
+            progress_callback: Callback function for progress updates
+            
+        Returns:
+            True if successful
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        local_dir = Path(local_dir)
+        local_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Get all remote files
+        try:
+            remote_files = self.list_files(volume_id, remote_dir)
+        except Exception as e:
+            logger.error(f"Failed to list remote files: {e}")
+            raise
+        
+        total_files = len(remote_files)
+        downloaded_files = 0
+        failed_files = []
+        
+        logger.info(f"Starting directory download: {total_files} files")
+        
+        def download_single_file(file_info):
+            remote_file = file_info["key"]
+            # Remove the remote_dir prefix if present
+            if remote_dir and remote_file.startswith(remote_dir):
+                relative_path = remote_file[len(remote_dir):].lstrip('/')
+            else:
+                relative_path = remote_file
+            
+            local_file = local_dir / relative_path
+            
+            try:
+                self.download_file(volume_id, remote_file, str(local_file))
+                return True, remote_file
+            except Exception as e:
+                logger.error(f"Failed to download {remote_file}: {e}")
+                return False, remote_file
+        
+        # Use ThreadPoolExecutor for concurrent downloads
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {executor.submit(download_single_file, file_info): file_info for file_info in remote_files}
+            
+            for future in as_completed(futures):
+                success, remote_file = future.result()
+                downloaded_files += 1
+                
+                if success:
+                    if progress_callback:
+                        progress_callback(downloaded_files, total_files, remote_file)
+                    logger.info(f"Downloaded ({downloaded_files}/{total_files}): {remote_file}")
+                else:
+                    failed_files.append(remote_file)
+        
+        if failed_files:
+            logger.error(f"Failed to download {len(failed_files)} files: {failed_files}")
+            return False
+        
+        logger.info(f"Directory download completed: {downloaded_files} files downloaded")
+        return True
     
     def download_file(
         self,
