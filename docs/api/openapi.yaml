@@ -13,13 +13,25 @@ info:
     
     ## Authentication
     
-    All endpoints require authentication via API key. You can authenticate in several ways:
+    This API requires **TWO SEPARATE SETS OF CREDENTIALS**:
     
-    1. **Bearer Token Header**: `Authorization: Bearer your-api-key`
-    2. **API Key Header**: `X-API-Key: your-api-key`
-    3. **Query Parameter**: `?api_key=your-api-key`
+    ### 1. Volume Management Operations
+    **Required for**: Create, list, get, update, delete volumes
+    - **Header**: `Authorization: Bearer rpa_your_api_key`
+    - **Get from**: [Runpod Console](https://console.runpod.io/user/settings) → API Keys
     
-    Get your API key from [Runpod Console](https://console.runpod.io/user/settings).
+    ### 2. File Operations (Upload, Download, List Files, Delete Files)
+    **Required for**: All file operations within volumes
+    - **Header**: `Authorization: Bearer rpa_your_api_key` (same as above)
+    - **Request Body**: S3 credentials object containing:
+      - `s3_access_key`: S3 access key (starts with `user_`)
+      - `s3_secret_key`: S3 secret key (starts with `rps_`)
+    - **Get from**: [Runpod Console](https://console.runpod.io/user/settings) → S3 API Keys
+    
+    ### Important Notes:
+    - File operations require S3 credentials in the request body
+    - Volume operations only need the API key
+    - Both credential types are obtained from the same console but are different keys
     
     ## Rate Limiting
     
@@ -135,6 +147,40 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+    patch:
+      summary: Update volume
+      description: Update a network volume's name and/or size. Size can only be increased.
+      tags:
+        - Volumes
+      parameters:
+        - name: volume_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique identifier of the volume
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NetworkVolumeUpdateRequest'
+      responses:
+        '200':
+          description: Volume updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkVolume'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
     delete:
       summary: Delete volume
       description: Delete a network volume. This operation is irreversible.
@@ -164,7 +210,10 @@ paths:
   /api/v1/volumes/{volume_id}/files:
     get:
       summary: List files in volume
-      description: List all files in a network volume, optionally filtered by prefix
+      description: |
+        List all files in a network volume, optionally filtered by prefix.
+        
+        **Important**: Requires S3 credentials configured on server.
       tags:
         - Files
       parameters:
@@ -196,7 +245,14 @@ paths:
 
     post:
       summary: Upload file
-      description: Upload a file to a network volume. Supports large files via multipart upload.
+      description: |
+        Upload a file to a network volume. Supports large files via multipart upload.
+        
+        **Important**: This endpoint requires BOTH:
+        1. API key via Authorization header
+        2. S3 credentials (RUNPOD_S3_ACCESS_KEY + RUNPOD_S3_SECRET_KEY) as server environment variables
+        
+        The server will return a 500 error if S3 credentials are not configured.
       tags:
         - Files
       parameters:
@@ -226,8 +282,18 @@ paths:
                   maximum: 524288000
                   default: 52428800
                   description: Chunk size for multipart upload in bytes
+                s3_access_key:
+                  type: string
+                  description: S3 access key (starts with 'user_')
+                  example: user_your_access_key_here
+                s3_secret_key:
+                  type: string
+                  description: S3 secret key (starts with 'rps_')
+                  example: rps_your_secret_key_here
               required:
                 - file
+                - s3_access_key
+                - s3_secret_key
       responses:
         '200':
           description: File uploaded successfully
@@ -247,7 +313,10 @@ paths:
   /api/v1/volumes/{volume_id}/files/{file_path}:
     get:
       summary: Download file
-      description: Download a file from a network volume
+      description: |
+        Download a file from a network volume.
+        
+        **Important**: Requires S3 credentials configured on server.
       tags:
         - Files
       parameters:
@@ -401,6 +470,24 @@ components:
         - name
         - size
         - datacenter_id
+
+    NetworkVolumeUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: New name for the network volume
+          example: renamed-storage
+        size:
+          type: integer
+          minimum: 10
+          maximum: 4000
+          description: New size in GB (must be larger than current size)
+          example: 100
+      minProperties: 1
+      description: Must specify at least name or size to update
 
     DatacenterID:
       type: string

@@ -22,11 +22,17 @@ from ..core.exceptions import (
 from ..core.models import (
     CreateVolumeRequest,
     DatacenterInfo,
+    DeleteFileRequest,
     DeleteResponse,
+    DownloadFileRequest,
     DownloadResponse,
+    ListFilesRequest,
     ListFilesResponse,
     ListVolumesResponse,
     NetworkVolume,
+    NetworkVolumeUpdateRequest,
+    S3Credentials,
+    UploadFileRequest,
     UploadResponse,
 )
 
@@ -157,6 +163,33 @@ async def get_volume(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.patch(
+    "/volumes/{volume_id}",
+    response_model=NetworkVolume,
+    summary="Update volume",
+    description="Update a network volume's name and/or size. Size can only be increased."
+)
+async def update_volume(
+    volume_id: str,
+    request: NetworkVolumeUpdateRequest,
+    api: RunpodStorageAPI = Depends(get_storage_api)
+) -> NetworkVolume:
+    """Update a network volume."""
+    try:
+        volume = api.update_volume(
+            volume_id=volume_id,
+            name=request.name,
+            size=request.size
+        )
+        return NetworkVolume(**volume)
+    except VolumeNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Volume {volume_id} not found")
+    except NetworkError as e:
+        raise HTTPException(status_code=e.status_code or 500, detail=str(e))
+    except RunpodStorageError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.delete(
     "/volumes/{volume_id}",
     response_model=DeleteResponse,
@@ -182,24 +215,31 @@ async def delete_volume(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get(
-    "/volumes/{volume_id}/files",
+@router.post(
+    "/volumes/{volume_id}/files/list",
     response_model=ListFilesResponse,
     summary="List files in volume",
     description="List all files in a network volume, optionally filtered by prefix."
 )
 async def list_files(
     volume_id: str,
-    prefix: str = "",
-    api: RunpodStorageAPI = Depends(get_storage_api)
+    request: ListFilesRequest,
+    api_key: str = Depends(get_api_key)
 ) -> ListFilesResponse:
     """List files in a volume."""
     try:
-        files = api.list_files(volume_id, prefix)
+        # Create API instance with provided S3 credentials
+        api = RunpodStorageAPI(
+            api_key=api_key,
+            s3_access_key=request.s3_credentials.s3_access_key,
+            s3_secret_key=request.s3_credentials.s3_secret_key
+        )
+        
+        files = api.list_files(volume_id, request.prefix or "")
         return ListFilesResponse(
             files=files,
             total_count=len(files),
-            prefix=prefix if prefix else None
+            prefix=request.prefix if request.prefix else None
         )
     except VolumeNotFoundError:
         raise HTTPException(status_code=404, detail=f"Volume {volume_id} not found")
@@ -220,7 +260,9 @@ async def upload_file(
     file: UploadFile = File(..., description="File to upload"),
     remote_path: str = Form(None, description="Remote path for the file"),
     chunk_size: int = Form(50 * 1024 * 1024, description="Chunk size for multipart upload"),
-    api: RunpodStorageAPI = Depends(get_storage_api)
+    s3_access_key: str = Form(..., description="S3 access key"),
+    s3_secret_key: str = Form(..., description="S3 secret key"),
+    api_key: str = Depends(get_api_key)
 ) -> UploadResponse:
     """Upload a file to a volume."""
     
@@ -237,6 +279,13 @@ async def upload_file(
     try:
         import time
         start_time = time.time()
+        
+        # Create API instance with provided S3 credentials
+        api = RunpodStorageAPI(
+            api_key=api_key,
+            s3_access_key=s3_access_key,
+            s3_secret_key=s3_secret_key
+        )
         
         success = api.upload_file(tmp_file_path, volume_id, remote_path, chunk_size)
         
@@ -266,16 +315,16 @@ async def upload_file(
             pass
 
 
-@router.get(
-    "/volumes/{volume_id}/files/{file_path:path}",
+@router.post(
+    "/volumes/{volume_id}/files/download",
     response_class=FileResponse,
     summary="Download file",
     description="Download a file from a network volume."
 )
 async def download_file(
     volume_id: str,
-    file_path: str,
-    api: RunpodStorageAPI = Depends(get_storage_api)
+    request: DownloadFileRequest,
+    api_key: str = Depends(get_api_key)
 ) -> FileResponse:
     """Download a file from a volume."""
     
@@ -284,17 +333,24 @@ async def download_file(
         tmp_file_path = tmp_file.name
     
     try:
-        success = api.download_file(volume_id, file_path, tmp_file_path)
+        # Create API instance with provided S3 credentials
+        api = RunpodStorageAPI(
+            api_key=api_key,
+            s3_access_key=request.s3_credentials.s3_access_key,
+            s3_secret_key=request.s3_credentials.s3_secret_key
+        )
+        
+        success = api.download_file(volume_id, request.remote_path, tmp_file_path)
         
         if success:
-            filename = os.path.basename(file_path)
+            filename = os.path.basename(request.remote_path)
             return FileResponse(
                 path=tmp_file_path,
                 filename=filename,
                 media_type="application/octet-stream"
             )
         else:
-            raise HTTPException(status_code=404, detail=f"File {file_path} not found")
+            raise HTTPException(status_code=404, detail=f"File {request.remote_path} not found")
     
     except VolumeNotFoundError:
         raise HTTPException(status_code=404, detail=f"Volume {volume_id} not found")
@@ -304,24 +360,31 @@ async def download_file(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.delete(
-    "/volumes/{volume_id}/files/{file_path:path}",
+@router.post(
+    "/volumes/{volume_id}/files/delete",
     response_model=DeleteResponse,
     summary="Delete file",
     description="Delete a file from a network volume."
 )
 async def delete_file(
     volume_id: str,
-    file_path: str,
-    api: RunpodStorageAPI = Depends(get_storage_api)
+    request: DeleteFileRequest,
+    api_key: str = Depends(get_api_key)
 ) -> DeleteResponse:
     """Delete a file from a volume."""
     try:
-        success = api.delete_file(volume_id, file_path)
+        # Create API instance with provided S3 credentials
+        api = RunpodStorageAPI(
+            api_key=api_key,
+            s3_access_key=request.s3_credentials.s3_access_key,
+            s3_secret_key=request.s3_credentials.s3_secret_key
+        )
+        
+        success = api.delete_file(volume_id, request.remote_path)
         if success:
-            return DeleteResponse(success=True, message=f"File {file_path} deleted successfully")
+            return DeleteResponse(success=True, message=f"File {request.remote_path} deleted successfully")
         else:
-            raise HTTPException(status_code=404, detail=f"File {file_path} not found")
+            raise HTTPException(status_code=404, detail=f"File {request.remote_path} not found")
     except VolumeNotFoundError:
         raise HTTPException(status_code=404, detail=f"Volume {volume_id} not found")
     except NetworkError as e:

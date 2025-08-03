@@ -62,6 +62,54 @@ class CreateVolumeRequest(BaseModel):
         return v
 
 
+class NetworkVolumeUpdateRequest(BaseModel):
+    """Request model for updating a network volume."""
+    
+    name: Optional[str] = Field(
+        None,
+        min_length=1,
+        max_length=64,
+        description="New name for the network volume",
+        example="renamed-storage"
+    )
+    size: Optional[int] = Field(
+        None,
+        ge=10,
+        le=4000,
+        description="New size in GB (must be larger than current size)",
+        example=100
+    )
+
+    @validator("name")
+    def validate_name(cls, v: Optional[str]) -> Optional[str]:
+        """Validate volume name."""
+        if v is not None and not v.replace("-", "").replace("_", "").isalnum():
+            raise ValueError("Name must contain only alphanumeric characters, hyphens, and underscores")
+        return v
+
+    @validator("size")
+    def validate_at_least_one_field(cls, v: Optional[int], values: dict) -> Optional[int]:
+        """Ensure at least one field is provided."""
+        if v is None and values.get("name") is None:
+            raise ValueError("Must specify at least name or size to update")
+        return v
+
+
+class S3Credentials(BaseModel):
+    """S3 credentials for file operations."""
+    
+    s3_access_key: str = Field(
+        ...,
+        description="S3 access key (starts with 'user_')",
+        example="user_your_access_key_here"
+    )
+    s3_secret_key: str = Field(
+        ...,
+        description="S3 secret key (starts with 'rps_')",
+        example="rps_your_secret_key_here"
+    )
+
+
 class UploadFileRequest(BaseModel):
     """Request model for file upload."""
     
@@ -76,6 +124,10 @@ class UploadFileRequest(BaseModel):
         le=500 * 1024 * 1024,
         description="Chunk size for multipart upload in bytes",
         example=50 * 1024 * 1024
+    )
+    s3_credentials: S3Credentials = Field(
+        ...,
+        description="S3 credentials for file operations"
     )
 
 
@@ -92,6 +144,39 @@ class DownloadFileRequest(BaseModel):
         None,
         description="Local path to save the file (defaults to filename)",
         example="./downloads/my-file.txt"
+    )
+    s3_credentials: S3Credentials = Field(
+        ...,
+        description="S3 credentials for file operations"
+    )
+
+
+class ListFilesRequest(BaseModel):
+    """Request model for listing files."""
+    
+    prefix: Optional[str] = Field(
+        None,
+        description="Prefix filter for file paths",
+        example="data/"
+    )
+    s3_credentials: S3Credentials = Field(
+        ...,
+        description="S3 credentials for file operations"
+    )
+
+
+class DeleteFileRequest(BaseModel):
+    """Request model for file deletion."""
+    
+    remote_path: str = Field(
+        ...,
+        min_length=1,
+        description="Remote path of the file to delete",
+        example="data/my-file.txt"
+    )
+    s3_credentials: S3Credentials = Field(
+        ...,
+        description="S3 credentials for file operations"
     )
 
 

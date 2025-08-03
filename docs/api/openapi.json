@@ -1,0 +1,1436 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Runpod Storage API",
+    "description": "\n        Professional REST API for Runpod network storage management.\n        \n        This API provides comprehensive access to Runpod storage operations including:\n        - Network volume management (create, list, delete)\n        - File operations (upload, download, list, delete)\n        - Robust error handling and validation\n        - OpenAPI 3.0 compliant documentation\n        \n        ## Authentication\n        \n        All endpoints require authentication via API key. You can authenticate in several ways:\n        \n        1. **Bearer Token Header**: `Authorization: Bearer your-api-key`\n        2. **API Key Header**: `X-API-Key: your-api-key`\n        3. **Query Parameter**: `?api_key=your-api-key`\n        \n        Get your API key from [Runpod Console](https://console.runpod.io/user/settings).\n        \n        ## Rate Limiting\n        \n        API requests are subject to rate limiting. See response headers for current limits.\n        \n        ## SDKs and Tools\n        \n        - **Python SDK**: `pip install runpod-storage`\n        - **CLI Tool**: `runpod-storage --help`\n        - **Docker Image**: `docker run runpod/storage-api`\n        ",
+    "contact": {
+      "name": "Runpod Storage Team",
+      "url": "https://github.com/runpod/runpod-storage",
+      "email": "support@runpod.io"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    },
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://storage-api.runpod.io",
+      "description": "Production server"
+    },
+    {
+      "url": "http://localhost:8000",
+      "description": "Development server"
+    }
+  ],
+  "paths": {
+    "/api/v1/volumes": {
+      "get": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "List network volumes",
+        "description": "Retrieve a list of all network volumes associated with your account.",
+        "operationId": "list_volumes_api_v1_volumes_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "api_key_header",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Api Key Header"
+            }
+          },
+          {
+            "name": "api_key_query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Api Key Query"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListVolumesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "Authorization failed"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "Create network volume",
+        "description": "Create a new network volume with specified name, size, and datacenter.",
+        "operationId": "create_volume_api_v1_volumes_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "api_key_header",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Api Key Header"
+            }
+          },
+          {
+            "name": "api_key_query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Api Key Query"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVolumeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetworkVolume"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "Authorization failed"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/volumes/{volume_id}": {
+      "get": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "Get volume details",
+        "description": "Retrieve detailed information about a specific network volume.",
+        "operationId": "get_volume_api_v1_volumes__volume_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "volume_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Volume Id"
+            }
+          },
+          {
+            "name": "api_key_header",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Api Key Header"
+            }
+          },
+          {
+            "name": "api_key_query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Api Key Query"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetworkVolume"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "Authorization failed"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "Update volume",
+        "description": "Update a network volume's name and/or size. Size can only be increased.",
+        "operationId": "update_volume_api_v1_volumes__volume_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "volume_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Volume Id"
+            }
+          },
+          {
+            "name": "api_key_header",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Api Key Header"
+            }
+          },
+          {
+            "name": "api_key_query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Api Key Query"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NetworkVolumeUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetworkVolume"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "Authorization failed"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "Delete volume",
+        "description": "Delete a network volume. This operation is irreversible.",
+        "operationId": "delete_volume_api_v1_volumes__volume_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "volume_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Volume Id"
+            }
+          },
+          {
+            "name": "api_key_header",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Api Key Header"
+            }
+          },
+          {
+            "name": "api_key_query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Api Key Query"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "Authorization failed"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/volumes/{volume_id}/files/list": {
+      "post": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "List files in volume",
+        "description": "List all files in a network volume, optionally filtered by prefix.",
+        "operationId": "list_files_api_v1_volumes__volume_id__files_list_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "volume_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Volume Id"
+            }
+          },
+          {
+            "name": "api_key_header",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Api Key Header"
+            }
+          },
+          {
+            "name": "api_key_query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Api Key Query"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListFilesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListFilesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "Authorization failed"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/volumes/{volume_id}/files": {
+      "post": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "Upload file",
+        "description": "Upload a file to a network volume. Supports large files via multipart upload.",
+        "operationId": "upload_file_api_v1_volumes__volume_id__files_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "volume_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Volume Id"
+            }
+          },
+          {
+            "name": "api_key_header",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Api Key Header"
+            }
+          },
+          {
+            "name": "api_key_query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Api Key Query"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_file_api_v1_volumes__volume_id__files_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "Authorization failed"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/volumes/{volume_id}/files/download": {
+      "post": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "Download file",
+        "description": "Download a file from a network volume.",
+        "operationId": "download_file_api_v1_volumes__volume_id__files_download_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "volume_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Volume Id"
+            }
+          },
+          {
+            "name": "api_key_header",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Api Key Header"
+            }
+          },
+          {
+            "name": "api_key_query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Api Key Query"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DownloadFileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "Authorization failed"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/volumes/{volume_id}/files/delete": {
+      "post": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "Delete file",
+        "description": "Delete a file from a network volume.",
+        "operationId": "delete_file_api_v1_volumes__volume_id__files_delete_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "volume_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Volume Id"
+            }
+          },
+          {
+            "name": "api_key_header",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Api Key Header"
+            }
+          },
+          {
+            "name": "api_key_query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Api Key Query"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteFileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "Authorization failed"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/datacenters": {
+      "get": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "List datacenters",
+        "description": "Get information about available Runpod datacenters.",
+        "operationId": "list_datacenters_api_v1_datacenters_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "api_key_header",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Api Key Header"
+            }
+          },
+          {
+            "name": "api_key_query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Api Key Query"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DatacenterInfo"
+                  },
+                  "title": "Response List Datacenters Api V1 Datacenters Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "Authorization failed"
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health Check",
+        "description": "Health check endpoint.",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthCheckResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "tags": [
+          "Root"
+        ],
+        "summary": "Root",
+        "description": "Root endpoint with API information.",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_upload_file_api_v1_volumes__volume_id__files_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File",
+            "description": "File to upload"
+          },
+          "remote_path": {
+            "type": "string",
+            "title": "Remote Path",
+            "description": "Remote path for the file"
+          },
+          "chunk_size": {
+            "type": "integer",
+            "title": "Chunk Size",
+            "description": "Chunk size for multipart upload",
+            "default": 52428800
+          },
+          "s3_access_key": {
+            "type": "string",
+            "title": "S3 Access Key",
+            "description": "S3 access key"
+          },
+          "s3_secret_key": {
+            "type": "string",
+            "title": "S3 Secret Key",
+            "description": "S3 secret key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "s3_access_key",
+          "s3_secret_key"
+        ],
+        "title": "Body_upload_file_api_v1_volumes__volume_id__files_post"
+      },
+      "CreateVolumeRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "description": "Name for the network volume",
+            "example": "my-storage-volume"
+          },
+          "size": {
+            "type": "integer",
+            "maximum": 4000.0,
+            "minimum": 10.0,
+            "title": "Size",
+            "description": "Size in GB (minimum 10GB, maximum 4000GB)",
+            "example": 50
+          },
+          "datacenter_id": {
+            "$ref": "#/components/schemas/DatacenterID",
+            "description": "Datacenter where the volume will be created",
+            "example": "EU-RO-1"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "size",
+          "datacenter_id"
+        ],
+        "title": "CreateVolumeRequest",
+        "description": "Request model for creating a network volume."
+      },
+      "DatacenterID": {
+        "type": "string",
+        "enum": [
+          "EUR-IS-1",
+          "EU-RO-1",
+          "EU-CZ-1",
+          "US-KS-2"
+        ],
+        "title": "DatacenterID",
+        "description": "Available Runpod datacenters."
+      },
+      "DatacenterInfo": {
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/DatacenterID",
+            "description": "Datacenter identifier"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Human-readable name",
+            "example": "Europe - Romania"
+          },
+          "s3_endpoint": {
+            "type": "string",
+            "title": "S3 Endpoint",
+            "description": "S3 API endpoint URL"
+          },
+          "region": {
+            "type": "string",
+            "title": "Region",
+            "description": "AWS-compatible region name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "s3_endpoint",
+          "region"
+        ],
+        "title": "DatacenterInfo",
+        "description": "Datacenter information."
+      },
+      "DeleteFileRequest": {
+        "properties": {
+          "remote_path": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Remote Path",
+            "description": "Remote path of the file to delete",
+            "example": "data/my-file.txt"
+          },
+          "s3_credentials": {
+            "$ref": "#/components/schemas/S3Credentials",
+            "description": "S3 credentials for file operations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "remote_path",
+          "s3_credentials"
+        ],
+        "title": "DeleteFileRequest",
+        "description": "Request model for file deletion."
+      },
+      "DeleteResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "Delete success status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Status message",
+            "example": "Successfully deleted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "message"
+        ],
+        "title": "DeleteResponse",
+        "description": "Response for delete operations."
+      },
+      "DownloadFileRequest": {
+        "properties": {
+          "remote_path": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Remote Path",
+            "description": "Remote path of the file to download",
+            "example": "data/my-file.txt"
+          },
+          "local_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Path",
+            "description": "Local path to save the file (defaults to filename)",
+            "example": "./downloads/my-file.txt"
+          },
+          "s3_credentials": {
+            "$ref": "#/components/schemas/S3Credentials",
+            "description": "S3 credentials for file operations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "remote_path",
+          "s3_credentials"
+        ],
+        "title": "DownloadFileRequest",
+        "description": "Request model for file download."
+      },
+      "FileInfo": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "File path/key",
+            "example": "data/my-file.txt"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size",
+            "description": "File size in bytes",
+            "example": 1024000
+          },
+          "last_modified": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Modified",
+            "description": "Last modification timestamp"
+          },
+          "etag": {
+            "type": "string",
+            "title": "Etag",
+            "description": "Entity tag for the file",
+            "example": "abc123def456"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type",
+            "description": "MIME content type",
+            "example": "text/plain"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "size",
+          "last_modified",
+          "etag"
+        ],
+        "title": "FileInfo",
+        "description": "File information."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthCheckResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Service status",
+            "example": "healthy"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "description": "API version",
+            "example": "1.0.0"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "Check timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "version"
+        ],
+        "title": "HealthCheckResponse",
+        "description": "Health check response."
+      },
+      "ListFilesRequest": {
+        "properties": {
+          "prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prefix",
+            "description": "Prefix filter for file paths",
+            "example": "data/"
+          },
+          "s3_credentials": {
+            "$ref": "#/components/schemas/S3Credentials",
+            "description": "S3 credentials for file operations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "s3_credentials"
+        ],
+        "title": "ListFilesRequest",
+        "description": "Request model for listing files."
+      },
+      "ListFilesResponse": {
+        "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileInfo"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "List of files in the volume"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count",
+            "description": "Total number of files",
+            "example": 42
+          },
+          "prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prefix",
+            "description": "Prefix filter used",
+            "example": "data/"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files",
+          "total_count"
+        ],
+        "title": "ListFilesResponse",
+        "description": "Response for listing files."
+      },
+      "ListVolumesResponse": {
+        "properties": {
+          "volumes": {
+            "items": {
+              "$ref": "#/components/schemas/NetworkVolume"
+            },
+            "type": "array",
+            "title": "Volumes",
+            "description": "List of network volumes"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count",
+            "description": "Total number of volumes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "volumes",
+          "total_count"
+        ],
+        "title": "ListVolumesResponse",
+        "description": "Response for listing volumes."
+      },
+      "NetworkVolume": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique volume identifier",
+            "example": "abc123def456"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Volume name",
+            "example": "my-storage-volume"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size",
+            "description": "Size in GB",
+            "example": 50
+          },
+          "datacenter_id": {
+            "$ref": "#/components/schemas/DatacenterID",
+            "description": "Datacenter location"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VolumeStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Volume status"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At",
+            "description": "Creation timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "size",
+          "datacenter_id"
+        ],
+        "title": "NetworkVolume",
+        "description": "Network volume information."
+      },
+      "NetworkVolumeUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "New name for the network volume",
+            "example": "renamed-storage"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 4000.0,
+                "minimum": 10.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size",
+            "description": "New size in GB (must be larger than current size)",
+            "example": 100
+          }
+        },
+        "type": "object",
+        "title": "NetworkVolumeUpdateRequest",
+        "description": "Request model for updating a network volume."
+      },
+      "S3Credentials": {
+        "properties": {
+          "s3_access_key": {
+            "type": "string",
+            "title": "S3 Access Key",
+            "description": "S3 access key (starts with 'user_')",
+            "example": "user_your_access_key_here"
+          },
+          "s3_secret_key": {
+            "type": "string",
+            "title": "S3 Secret Key",
+            "description": "S3 secret key (starts with 'rps_')",
+            "example": "rps_your_secret_key_here"
+          }
+        },
+        "type": "object",
+        "required": [
+          "s3_access_key",
+          "s3_secret_key"
+        ],
+        "title": "S3Credentials",
+        "description": "S3 credentials for file operations."
+      },
+      "UploadResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "Upload success status"
+          },
+          "file_path": {
+            "type": "string",
+            "title": "File Path",
+            "description": "Remote file path",
+            "example": "data/my-file.txt"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size",
+            "description": "Uploaded file size in bytes",
+            "example": 1024000
+          },
+          "upload_time": {
+            "type": "number",
+            "title": "Upload Time",
+            "description": "Upload time in seconds",
+            "example": 12.34
+          },
+          "speed_mbps": {
+            "type": "number",
+            "title": "Speed Mbps",
+            "description": "Upload speed in MB/s",
+            "example": 4.2
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "file_path",
+          "size",
+          "upload_time",
+          "speed_mbps"
+        ],
+        "title": "UploadResponse",
+        "description": "Response for file upload."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VolumeStatus": {
+        "type": "string",
+        "enum": [
+          "creating",
+          "available",
+          "deleting",
+          "error"
+        ],
+        "title": "VolumeStatus",
+        "description": "Volume status enumeration."
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}
