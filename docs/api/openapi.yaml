@@ -1,0 +1,649 @@
+openapi: 3.0.3
+info:
+  title: Runpod Storage API
+  version: 1.0.0
+  description: |
+    Professional REST API for Runpod network storage management.
+    
+    This API provides comprehensive access to Runpod storage operations including:
+    - Network volume management (create, list, delete)
+    - File operations (upload, download, list, delete)
+    - Robust error handling and validation
+    - OpenAPI 3.0 compliant documentation
+    
+    ## Authentication
+    
+    All endpoints require authentication via API key. You can authenticate in several ways:
+    
+    1. **Bearer Token Header**: `Authorization: Bearer your-api-key`
+    2. **API Key Header**: `X-API-Key: your-api-key`
+    3. **Query Parameter**: `?api_key=your-api-key`
+    
+    Get your API key from [Runpod Console](https://console.runpod.io/user/settings).
+    
+    ## Rate Limiting
+    
+    API requests are subject to rate limiting. See response headers for current limits.
+    
+    ## SDKs and Tools
+    
+    - **Python SDK**: `pip install runpod-storage`
+    - **CLI Tool**: `runpod-storage --help`
+    - **Docker Image**: `docker run runpod/storage-api`
+  contact:
+    name: Runpod Storage Team
+    email: support@runpod.io
+    url: https://github.com/runpod/runpod-storage
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://storage-api.runpod.io
+    description: Production server
+  - url: http://localhost:8000
+    description: Development server
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
+  - ApiKeyQuery: []
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Check the health status of the API service
+      tags:
+        - Health
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCheckResponse'
+
+  /api/v1/volumes:
+    get:
+      summary: List network volumes
+      description: Retrieve a list of all network volumes associated with your account
+      tags:
+        - Volumes
+      responses:
+        '200':
+          description: List of network volumes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListVolumesResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      summary: Create network volume
+      description: Create a new network volume with specified name, size, and datacenter
+      tags:
+        - Volumes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVolumeRequest'
+      responses:
+        '201':
+          description: Volume created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkVolume'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/volumes/{volume_id}:
+    get:
+      summary: Get volume details
+      description: Retrieve detailed information about a specific network volume
+      tags:
+        - Volumes
+      parameters:
+        - name: volume_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique identifier of the volume
+      responses:
+        '200':
+          description: Volume details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkVolume'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      summary: Delete volume
+      description: Delete a network volume. This operation is irreversible.
+      tags:
+        - Volumes
+      parameters:
+        - name: volume_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique identifier of the volume
+      responses:
+        '200':
+          description: Volume deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/volumes/{volume_id}/files:
+    get:
+      summary: List files in volume
+      description: List all files in a network volume, optionally filtered by prefix
+      tags:
+        - Files
+      parameters:
+        - name: volume_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique identifier of the volume
+        - name: prefix
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Prefix filter for file paths
+      responses:
+        '200':
+          description: List of files
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListFilesResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      summary: Upload file
+      description: Upload a file to a network volume. Supports large files via multipart upload.
+      tags:
+        - Files
+      parameters:
+        - name: volume_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique identifier of the volume
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: File to upload
+                remote_path:
+                  type: string
+                  description: Remote path for the file (optional)
+                chunk_size:
+                  type: integer
+                  minimum: 1048576
+                  maximum: 524288000
+                  default: 52428800
+                  description: Chunk size for multipart upload in bytes
+              required:
+                - file
+      responses:
+        '200':
+          description: File uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/volumes/{volume_id}/files/{file_path}:
+    get:
+      summary: Download file
+      description: Download a file from a network volume
+      tags:
+        - Files
+      parameters:
+        - name: volume_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique identifier of the volume
+        - name: file_path
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Path to the file in the volume
+      responses:
+        '200':
+          description: File content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      summary: Delete file
+      description: Delete a file from a network volume
+      tags:
+        - Files
+      parameters:
+        - name: volume_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique identifier of the volume
+        - name: file_path
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Path to the file in the volume
+      responses:
+        '200':
+          description: File deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/datacenters:
+    get:
+      summary: List datacenters
+      description: Get information about available Runpod datacenters
+      tags:
+        - Configuration
+      responses:
+        '200':
+          description: List of datacenters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DatacenterInfo'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API Key
+      description: Use your Runpod API key as a bearer token
+
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Use your Runpod API key in the X-API-Key header
+
+    ApiKeyQuery:
+      type: apiKey
+      in: query
+      name: api_key
+      description: Use your Runpod API key as a query parameter
+
+  schemas:
+    NetworkVolume:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique volume identifier
+          example: abc123def456
+        name:
+          type: string
+          description: Volume name
+          example: my-storage-volume
+        size:
+          type: integer
+          description: Size in GB
+          example: 50
+        datacenter_id:
+          $ref: '#/components/schemas/DatacenterID'
+        status:
+          $ref: '#/components/schemas/VolumeStatus'
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+      required:
+        - id
+        - name
+        - size
+        - datacenter_id
+
+    CreateVolumeRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Name for the network volume
+          example: my-storage-volume
+        size:
+          type: integer
+          minimum: 10
+          maximum: 4000
+          description: Size in GB (minimum 10GB, maximum 4000GB)
+          example: 50
+        datacenter_id:
+          $ref: '#/components/schemas/DatacenterID'
+      required:
+        - name
+        - size
+        - datacenter_id
+
+    DatacenterID:
+      type: string
+      enum:
+        - EUR-IS-1
+        - EU-RO-1
+        - EU-CZ-1
+        - US-KS-2
+      description: Available Runpod datacenter identifiers
+
+    VolumeStatus:
+      type: string
+      enum:
+        - creating
+        - available
+        - deleting
+        - error
+      description: Current status of the volume
+
+    FileInfo:
+      type: object
+      properties:
+        key:
+          type: string
+          description: File path/key
+          example: data/my-file.txt
+        size:
+          type: integer
+          description: File size in bytes
+          example: 1024000
+        last_modified:
+          type: string
+          format: date-time
+          description: Last modification timestamp
+        etag:
+          type: string
+          description: Entity tag for the file
+          example: abc123def456
+        content_type:
+          type: string
+          description: MIME content type
+          example: text/plain
+      required:
+        - key
+        - size
+        - last_modified
+        - etag
+
+    ListVolumesResponse:
+      type: object
+      properties:
+        volumes:
+          type: array
+          items:
+            $ref: '#/components/schemas/NetworkVolume'
+          description: List of network volumes
+        total_count:
+          type: integer
+          description: Total number of volumes
+          example: 42
+      required:
+        - volumes
+        - total_count
+
+    ListFilesResponse:
+      type: object
+      properties:
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileInfo'
+          description: List of files in the volume
+        total_count:
+          type: integer
+          description: Total number of files
+          example: 42
+        prefix:
+          type: string
+          description: Prefix filter used
+          example: data/
+      required:
+        - files
+        - total_count
+
+    UploadResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Upload success status
+        file_path:
+          type: string
+          description: Remote file path
+          example: data/my-file.txt
+        size:
+          type: integer
+          description: Uploaded file size in bytes
+          example: 1024000
+        upload_time:
+          type: number
+          description: Upload time in seconds
+          example: 12.34
+        speed_mbps:
+          type: number
+          description: Upload speed in MB/s
+          example: 4.2
+      required:
+        - success
+        - file_path
+        - size
+        - upload_time
+        - speed_mbps
+
+    DeleteResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: Delete success status
+        message:
+          type: string
+          description: Status message
+          example: Successfully deleted
+      required:
+        - success
+        - message
+
+    DatacenterInfo:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/DatacenterID'
+        name:
+          type: string
+          description: Human-readable name
+          example: Europe - Romania
+        s3_endpoint:
+          type: string
+          format: uri
+          description: S3 API endpoint URL
+        region:
+          type: string
+          description: AWS-compatible region name
+      required:
+        - id
+        - name
+        - s3_endpoint
+        - region
+
+    HealthCheckResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          description: Service status
+          example: healthy
+        version:
+          type: string
+          description: API version
+          example: 1.0.0
+        timestamp:
+          type: string
+          format: date-time
+          description: Check timestamp
+      required:
+        - status
+        - version
+        - timestamp
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error type
+          example: ValidationError
+        message:
+          type: string
+          description: Error message
+          example: Invalid input
+        details:
+          type: object
+          description: Additional error details
+        timestamp:
+          type: string
+          format: date-time
+          description: Error timestamp
+      required:
+        - error
+        - message
+        - timestamp
+
+  responses:
+    BadRequestError:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: ValidationError
+            message: Invalid input parameters
+            timestamp: "2023-01-01T00:00:00Z"
+
+    UnauthorizedError:
+      description: Authentication failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: AuthenticationError
+            message: Invalid or missing API key
+            timestamp: "2023-01-01T00:00:00Z"
+
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: NotFoundError
+            message: Resource not found
+            timestamp: "2023-01-01T00:00:00Z"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: InternalServerError
+            message: An unexpected error occurred
+            timestamp: "2023-01-01T00:00:00Z"
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Volumes
+    description: Network volume management
+  - name: Files
+    description: File operations
+  - name: Configuration
+    description: Service configuration
