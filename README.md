@@ -75,25 +75,25 @@ uv sync --all-extras
 export RUNPOD_API_KEY="your_api_key_here"
 
 # Or pass it directly
-runpod-storage --api-key "your_key" list-volumes
+uv run runpod-storage --api-key "your_key" list-volumes
 
 # Interactive mode (easiest - includes file browser!)
-runpod-storage interactive
+uv run runpod-storage interactive
 
 # Create a volume
-runpod-storage create-volume --name "my-storage" --size 50 --datacenter EU-RO-1
+uv run runpod-storage create-volume --name "my-storage" --size 50 --datacenter EU-RO-1
 
 # Upload single files
-runpod-storage upload /path/to/file.txt volume-id
+uv run runpod-storage upload /path/to/file.txt volume-id
 
 # Upload directories (sync functionality)
-runpod-storage upload /path/to/directory volume-id
+uv run runpod-storage upload /path/to/directory volume-id
 
 # Download files
-runpod-storage download volume-id remote/file.txt
+uv run runpod-storage download volume-id remote/file.txt
 
 # Download directories
-runpod-storage download volume-id remote/directory/ /local/path
+uv run runpod-storage download volume-id remote/directory/ /local/path
 ```
 
 ### Python SDK
@@ -151,7 +151,7 @@ api.download_directory(volume['id'], "remote_directory/", "local_directory/")
 
 ```bash
 # Start the API server
-runpod-storage-server --host 0.0.0.0 --port 8000
+uv run runpod-storage-server --host 0.0.0.0 --port 8000
 
 # Or with Docker (build locally)
 docker build -t runpod-storage .
@@ -209,11 +209,11 @@ export RUNPOD_S3_SECRET_KEY="rps_your_s3_secret_key"
 
 ```bash
 # CLI flag (highest priority)
-runpod-storage --api-key "your_key" list-volumes
+uv run runpod-storage --api-key "your_key" list-volumes
 
 # Environment variable
 export RUNPOD_API_KEY="your_key"
-runpod-storage list-volumes
+uv run runpod-storage list-volumes
 
 # Configuration file
 echo "api_key = your_key" > ~/.runpod/config.toml
@@ -224,7 +224,7 @@ echo "api_key = your_key" > ~/.runpod/config.toml
 ### Interactive File Browser
 Navigate your network volumes like a file manager:
 ```bash
-runpod-storage interactive
+uv run runpod-storage interactive
 # Choose option 6: Browse volume files
 ```
 
@@ -239,7 +239,7 @@ Features:
 Full lifecycle management of network volumes:
 ```bash
 # Interactive mode
-runpod-storage interactive
+uv run runpod-storage interactive
 
 # Volume operations:
 # 2. Create volume    - Create new volumes with size and datacenter selection
@@ -251,7 +251,7 @@ runpod-storage interactive
 Upload and download entire directories with smart sync:
 ```bash
 # Interactive mode
-runpod-storage interactive
+uv run runpod-storage interactive
 # Choose option 6: Upload file/directory
 
 # Automatically detects directories and offers:
@@ -341,7 +341,7 @@ api.download_directory(
 ### Interactive CLI Workflow
 
 ```bash
-$ runpod-storage interactive
+$ uv run runpod-storage interactive
 
 Runpod Storage Manager
 1. List volumes
@@ -588,7 +588,7 @@ uv run runpod-storage-server
 ### Directory Upload Issues
 
 **"Path is a directory" error when using CLI:**
-- ✅ Use the interactive mode: `runpod-storage interactive` → option 4
+- ✅ Use the interactive mode: `uv run runpod-storage interactive` → option 4
 - ✅ The system will automatically detect directories and offer sync options
 
 **Slow directory uploads:**
