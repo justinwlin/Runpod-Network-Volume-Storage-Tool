@@ -1,0 +1,467 @@
+openapi: 3.0.3
+info:
+  title: Runpod Network Storage API
+  version: 2.0.0
+  description: |
+    Complete OpenAPI specification for Runpod Network Storage management.
+    
+    This API provides comprehensive access to Runpod storage operations including:
+    - Network volume management (create, list, update, delete)
+    - File operations (upload, download, list, delete via S3-compatible API)
+    - Directory synchronization with progress tracking
+    - Interactive file browser capabilities
+    
+    ## Base URL
+    
+    All API endpoints are relative to: `https://rest.runpod.io/v1`
+    
+    ## Authentication
+    
+    All endpoints require authentication via Bearer token:
+    ```
+    Authorization: Bearer rpa_your_api_key_here
+    ```
+    
+    Get your API key from [Runpod Console](https://console.runpod.io/user/settings).
+    
+    ## Two Separate APIs
+    
+    This specification covers **Volume Management** only. File operations use a separate API:
+    
+    ### 1. Runpod REST API (This Spec)
+    - **Base URL**: `https://rest.runpod.io/v1`
+    - **Auth**: Bearer token (`RUNPOD_API_KEY`)
+    - **Operations**: Create, list, update, delete volumes
+    
+    ### 2. S3-Compatible File API (Separate)
+    - **Endpoints**: `https://s3api-{datacenter}.runpod.io/`
+    - **Auth**: AWS S3 credentials (`RUNPOD_S3_ACCESS_KEY` + `RUNPOD_S3_SECRET_KEY`)
+    - **Operations**: Upload, download, list, delete files
+    - **Protocol**: Standard AWS S3 API (use AWS SDK or boto3)
+    
+    ## Volume Size Limits
+    
+    - Minimum: 10 GB
+    - Maximum: 4,000 GB (4 TB)
+    - Updates: Can only increase size, never decrease
+    
+  contact:
+    name: Runpod Network Storage
+    url: https://docs.runpod.io/serverless/storage/s3-api
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://rest.runpod.io/v1
+    description: Runpod Production API
+
+security:
+  - BearerAuth: []
+
+paths:
+  /networkvolumes:
+    get:
+      summary: List all network volumes
+      description: Retrieve a list of all network volumes associated with your account.
+      operationId: listNetworkVolumes
+      tags:
+        - Volume Management
+      responses:
+        '200':
+          description: List of network volumes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NetworkVolume'
+              examples:
+                volumeList:
+                  summary: Example volume list
+                  value:
+                    - id: "930lisk9n5"
+                      name: "cli-test"
+                      size: 10
+                      dataCenterId: "EU-RO-1"
+                    - id: "sp6grrltut"
+                      name: "test"
+                      size: 10
+                      dataCenterId: "EU-RO-1"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      summary: Create a new network volume
+      description: Create a new network volume in the specified datacenter.
+      operationId: createNetworkVolume
+      tags:
+        - Volume Management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NetworkVolumeCreateInput'
+            examples:
+              createVolume:
+                summary: Create 50GB volume
+                value:
+                  name: "my-storage"
+                  size: 50
+                  dataCenterId: "EU-RO-1"
+      responses:
+        '201':
+          description: Network volume created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkVolume'
+              examples:
+                createdVolume:
+                  summary: Created volume response
+                  value:
+                    id: "agv6w2qcg7"
+                    name: "my-storage"
+                    size: 50
+                    dataCenterId: "EU-RO-1"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /networkvolumes/{networkVolumeId}:
+    get:
+      summary: Get network volume details
+      description: Retrieve detailed information about a specific network volume.
+      operationId: getNetworkVolume
+      tags:
+        - Volume Management
+      parameters:
+        - $ref: '#/components/parameters/NetworkVolumeId'
+      responses:
+        '200':
+          description: Network volume details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkVolume'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    patch:
+      summary: Update a network volume
+      description: |
+        Update a network volume's name and/or size.
+        
+        **Important**: Volume size can only be increased, never decreased.
+      operationId: updateNetworkVolume
+      tags:
+        - Volume Management
+      parameters:
+        - $ref: '#/components/parameters/NetworkVolumeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NetworkVolumeUpdateInput'
+            examples:
+              renameVolume:
+                summary: Rename volume
+                value:
+                  name: "renamed-storage"
+              expandVolume:
+                summary: Expand volume size
+                value:
+                  size: 100
+              updateBoth:
+                summary: Update name and size
+                value:
+                  name: "large-storage"
+                  size: 200
+      responses:
+        '200':
+          description: Network volume updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkVolume'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Delete a network volume
+      description: |
+        Permanently delete a network volume and all its data.
+        
+        **Warning**: This action is irreversible. All files and data will be permanently lost.
+      operationId: deleteNetworkVolume
+      tags:
+        - Volume Management
+      parameters:
+        - $ref: '#/components/parameters/NetworkVolumeId'
+      responses:
+        '204':
+          description: Network volume successfully deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API_KEY
+      description: |
+        Runpod API key with 'rpa_' prefix.
+        
+        Example: `Authorization: Bearer rpa_your_api_key_here`
+
+  parameters:
+    NetworkVolumeId:
+      name: networkVolumeId
+      in: path
+      required: true
+      description: Unique identifier for the network volume
+      schema:
+        type: string
+        pattern: '^[a-zA-Z0-9]+$'
+        example: "930lisk9n5"
+
+  schemas:
+    NetworkVolume:
+      type: object
+      description: A Runpod network volume
+      required:
+        - id
+        - name
+        - size
+        - dataCenterId
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the network volume
+          example: "930lisk9n5"
+        name:
+          type: string
+          description: User-defined name for the network volume
+          example: "my-storage"
+        size:
+          type: integer
+          description: Volume size in gigabytes (GB)
+          minimum: 10
+          maximum: 4000
+          example: 50
+        dataCenterId:
+          type: string
+          description: Runpod datacenter where the volume is located
+          enum:
+            - "EUR-IS-1"
+            - "EU-RO-1"
+            - "EU-CZ-1" 
+            - "US-KS-2"
+          example: "EU-RO-1"
+
+    NetworkVolumeCreateInput:
+      type: object
+      description: Input for creating a new network volume
+      required:
+        - name
+        - size
+        - dataCenterId
+      properties:
+        name:
+          type: string
+          description: User-defined name for the network volume
+          minLength: 1
+          maxLength: 100
+          example: "my-storage"
+        size:
+          type: integer
+          description: Volume size in gigabytes (GB)
+          minimum: 10
+          maximum: 4000
+          example: 50
+        dataCenterId:
+          type: string
+          description: Runpod datacenter where the volume will be created
+          enum:
+            - "EUR-IS-1"
+            - "EU-RO-1"
+            - "EU-CZ-1"
+            - "US-KS-2"
+          example: "EU-RO-1"
+
+    NetworkVolumeUpdateInput:
+      type: object
+      description: Input for updating a network volume
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          description: New name for the network volume
+          minLength: 1
+          maxLength: 100
+          example: "renamed-storage"
+        size:
+          type: integer
+          description: |
+            New size in gigabytes (GB). Must be larger than current size.
+            Volume size can only be increased, never decreased.
+          minimum: 1
+          maximum: 4000
+          example: 100
+
+    DataCenter:
+      type: object
+      description: Available datacenter information
+      properties:
+        id:
+          type: string
+          description: Datacenter identifier
+          enum:
+            - "EUR-IS-1"
+            - "EU-RO-1"
+            - "EU-CZ-1"
+            - "US-KS-2"
+        region:
+          type: string
+          description: Geographic region
+          enum:
+            - "Iceland"
+            - "Romania"
+            - "Czech Republic"
+            - "Kansas, USA"
+        s3Endpoint:
+          type: string
+          format: uri
+          description: S3-compatible API endpoint for file operations
+          example: "https://s3api-eu-ro-1.runpod.io/"
+
+    Error:
+      type: object
+      description: Error response
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error type
+          example: "INVALID_INPUT"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Volume size must be between 10 and 4000 GB"
+        details:
+          type: object
+          description: Additional error details
+          additionalProperties: true
+
+  responses:
+    BadRequest:
+      description: Invalid input or request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            invalidSize:
+              summary: Invalid volume size
+              value:
+                error: "INVALID_INPUT"
+                message: "Volume size must be between 10 and 4000 GB"
+            invalidDatacenter:
+              summary: Invalid datacenter
+              value:
+                error: "INVALID_INPUT"
+                message: "Invalid datacenter. Must be one of: EUR-IS-1, EU-RO-1, EU-CZ-1, US-KS-2"
+            sizeTooSmall:
+              summary: Cannot decrease volume size
+              value:
+                error: "INVALID_UPDATE"
+                message: "New size (30 GB) must be larger than current size (50 GB)"
+
+    Unauthorized:
+      description: Authentication required or invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            missingAuth:
+              summary: Missing authentication
+              value:
+                error: "UNAUTHORIZED"
+                message: "Authentication required. Provide API key via Authorization header."
+            invalidKey:
+              summary: Invalid API key
+              value:
+                error: "UNAUTHORIZED"
+                message: "Invalid API key. Check your credentials."
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            volumeNotFound:
+              summary: Volume not found
+              value:
+                error: "NOT_FOUND"
+                message: "Network volume with ID '930lisk9n5' not found"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            serverError:
+              summary: Server error
+              value:
+                error: "INTERNAL_ERROR"
+                message: "An unexpected error occurred. Please try again later."
+
+tags:
+  - name: Volume Management
+    description: |
+      Operations for managing Runpod network volumes.
+      
+      Network volumes provide persistent storage that can be attached to pods
+      and accessed via S3-compatible API for file operations.
+      
+      **Supported Operations:**
+      - Create volumes in different datacenters
+      - List all volumes with details
+      - Update volume names and expand storage
+      - Delete volumes (with data loss warning)
+      
+      **File Operations:**
+      Use the S3-compatible API endpoints for file operations:
+      - Upload/download files and directories
+      - List files with metadata
+      - Delete files and folders
+      - Sync local directories to volumes
+
+externalDocs:
+  description: Runpod Storage Documentation
+  url: https://docs.runpod.io/serverless/storage/s3-api
