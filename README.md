@@ -9,12 +9,15 @@ Runpod Storage provides a comprehensive suite of tools for managing Runpod netwo
 ## ✨ Features
 
 - 🎯 **Multi-Interface Access**: CLI, Python SDK, and REST API server
-- 🚀 **High Performance**: Robust multipart uploads with retry logic for large files
+- 📁 **Directory Sync**: AWS S3-like directory upload/download with progress tracking
+- 🗂️ **Interactive File Browser**: Navigate and manage files like a desktop file manager
+- 🚀 **High Performance**: Robust multipart uploads with retry logic and concurrent transfers
 - 🔒 **Enterprise Security**: Comprehensive authentication and error handling
 - 📚 **OpenAPI Compliant**: Full OpenAPI 3.0 specification with auto-generated docs
 - 🐳 **Production Ready**: Docker support with health checks and monitoring
 - 📖 **Comprehensive Docs**: Extensive documentation with examples and tutorials
 - ⚡ **Zero Config**: Works out of the box with sensible defaults
+- 🎛️ **Smart Exclusions**: Automatically exclude system files (.DS_Store, .git, __pycache__)
 
 ## 🏗️ Architecture
 
@@ -66,17 +69,23 @@ export RUNPOD_API_KEY="your_api_key_here"
 # Or pass it directly
 runpod-storage --api-key "your_key" list-volumes
 
-# Interactive mode (easiest)
+# Interactive mode (easiest - includes file browser!)
 runpod-storage interactive
 
 # Create a volume
 runpod-storage create-volume --name "my-storage" --size 50 --datacenter EU-RO-1
 
-# Upload files
+# Upload single files
 runpod-storage upload /path/to/file.txt volume-id
+
+# Upload directories (sync functionality)
+runpod-storage upload /path/to/directory volume-id
 
 # Download files  
 runpod-storage download volume-id remote/file.txt
+
+# Download directories
+runpod-storage download volume-id remote/directory/ /local/path
 ```
 
 ### Python SDK
@@ -98,16 +107,28 @@ print(f"Found {len(volumes)} volumes")
 volume = api.create_volume("my-storage", 50, "EU-RO-1")
 print(f"Created volume: {volume['id']}")
 
-# Upload a file
+# Upload a single file
 api.upload_file("local_file.txt", volume['id'], "remote_file.txt")
+
+# Upload entire directory (with sync functionality)
+api.upload_directory(
+    "local_directory/", 
+    volume['id'], 
+    "remote_directory/",
+    exclude_patterns=["*.log", "*.tmp"],
+    delete=True  # Delete remote files not present locally
+)
 
 # List files
 files = api.list_files(volume['id'])
 for file_info in files:
     print(f"{file_info['key']} - {file_info['size']} bytes")
 
-# Download a file
+# Download a single file
 api.download_file(volume['id'], "remote_file.txt", "downloaded_file.txt")
+
+# Download entire directory
+api.download_directory(volume['id'], "remote_directory/", "local_directory/")
 ```
 
 ### REST API Server
@@ -134,6 +155,8 @@ Visit `http://localhost:8000/docs` for interactive API documentation.
 
 ### 📖 Examples
 - [**Basic Usage**](examples/basic_usage.py) - Python SDK examples
+- [**Directory Sync**](examples/directory_sync.py) - Upload/download directories with progress tracking
+- [**File Browser CLI**](examples/file_browser_cli.py) - Programmatic file browser implementation
 - [**Server Integration**](examples/server_example.py) - REST API client examples
 
 ## 🌍 Available Datacenters
@@ -179,7 +202,111 @@ runpod-storage list-volumes
 echo "api_key = your_key" > ~/.runpod/config.toml
 ```
 
+## 🚀 New Features
+
+### Interactive File Browser
+Navigate your network volumes like a file manager:
+```bash
+runpod-storage interactive
+# Choose option 6: Browse volume files
+```
+
+Features:
+- 📁 Navigate directories with breadcrumb paths
+- 📄 View files with size and modification dates
+- ⬇️ Download files directly from browser
+- 🗑️ Delete files with confirmation prompts
+- 🔍 Real-time directory listing
+
+### Directory Sync (AWS S3-like)
+Upload and download entire directories with smart sync:
+```bash
+# Interactive mode
+runpod-storage interactive
+# Choose option 4: Upload file/directory
+
+# Automatically detects directories and offers:
+# - Progress tracking for each file
+# - Exclude patterns (.DS_Store, .git/, __pycache__)
+# - Option to delete remote files not present locally
+# - Concurrent uploads for speed
+```
+
 ## 📊 Examples
+
+### Directory Sync Operations
+
+```python
+from runpod_storage import RunpodStorageAPI
+
+api = RunpodStorageAPI()
+
+# Smart directory upload with progress tracking
+def upload_callback(current, total, filename):
+    print(f"[{current}/{total}] Uploading: {filename}")
+
+api.upload_directory(
+    "my_project/",           # Local directory
+    "volume-id",             # Target volume
+    "backup/my_project/",    # Remote path
+    exclude_patterns=[       # Skip these files
+        "*.log", "*.tmp", "node_modules/*", 
+        ".git/*", "__pycache__/*"
+    ],
+    delete=True,             # Remove remote files not in local
+    progress_callback=upload_callback
+)
+
+# Download entire directory structure
+def download_callback(current, total, filename):
+    print(f"[{current}/{total}] Downloaded: {filename}")
+
+api.download_directory(
+    "volume-id", 
+    "backup/my_project/",    # Remote directory
+    "restored_project/",     # Local destination
+    progress_callback=download_callback
+)
+```
+
+### Interactive CLI Workflow
+
+```bash
+$ runpod-storage interactive
+
+Runpod Storage Manager
+1. List volumes
+2. Create volume
+3. List files
+4. Upload file/directory     ← Handles both files & directories
+5. Download file/directory   ← Handles both files & directories
+6. Browse volume files       ← NEW: Interactive file browser
+7. Exit
+
+Choose action [1/2/3/4/5/6/7] (1): 6
+
+File Browser - Volume: my-volume-id
+Current path: /
+
+Directories:
+  📁 projects/
+  📁 backups/
+
+Files:
+┏━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┓
+┃ Name         ┃ Size    ┃ Modified           ┃
+┡━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━┩
+│ readme.txt   │ 1.2 KB  │ 2024-01-15 14:30   │
+│ config.json  │ 856 B   │ 2024-01-15 12:15   │
+└──────────────┴─────────┴────────────────────┘
+
+Actions:
+1. Enter directory
+2. Go up one level
+3. Download file
+4. Delete file
+5. Exit browser
+```
 
 ### Basic File Management
 
@@ -368,12 +495,70 @@ uv run runpod-storage-server
 # OpenAPI spec available at: docs/api/openapi.yaml
 ```
 
+## 🔧 Troubleshooting
+
+### Directory Upload Issues
+
+**"Path is a directory" error when using CLI:**
+- ✅ Use the interactive mode: `runpod-storage interactive` → option 4
+- ✅ The system will automatically detect directories and offer sync options
+
+**Slow directory uploads:**
+- ✅ Large directories use concurrent uploads (4 threads by default)
+- ✅ Check your network connection and Runpod datacenter proximity
+- ✅ Consider using exclude patterns to skip unnecessary files
+
+**Files not uploading:**
+- ✅ Check exclude patterns - `.DS_Store`, `.git/`, `__pycache__/` are automatically excluded
+- ✅ Verify file permissions and that files aren't locked
+- ✅ Check available space on your network volume
+
+### File Browser Issues
+
+**"No files found" in browser:**
+- ✅ Files may be in subdirectories - navigate using option 1
+- ✅ Check if files were uploaded to a specific path
+- ✅ Verify S3 API keys have proper permissions
+
+**Browser navigation problems:**
+- ✅ Use breadcrumb path to understand current location: `/path/to/current`
+- ✅ Use option 2 to go up directories
+- ✅ Refresh (option 5 → return) if directory listing seems stale
+
+### Performance Optimization
+
+**Speed up large transfers:**
+```python
+# Increase concurrent workers for very large directories
+api.upload_directory(
+    "large_directory/",
+    volume_id,
+    "remote_path/",
+    # Use more aggressive exclusions
+    exclude_patterns=[
+        "*.log", "*.tmp", "node_modules/*", ".git/*", 
+        "*.pyc", "__pycache__/*", ".DS_Store", "*.cache"
+    ]
+)
+```
+
+**Monitor transfer progress:**
+```python
+def detailed_progress(current, total, filename):
+    percent = (current / total) * 100
+    print(f"[{current:4d}/{total:4d}] {percent:6.2f}% - {filename}")
+    
+    # Log to file for large transfers
+    with open("transfer.log", "a") as f:
+        f.write(f"{filename} - {percent:.2f}%\n")
+```
+
 ## 🎯 Roadmap
 
-- [ ] GraphQL API support
-- [ ] Streaming upload/download for very large files
-- [ ] Volume snapshots and backups
-- [ ] Advanced file synchronization
+- [x] Directory sync with AWS S3-like functionality
+- [x] Interactive file browser with navigation
+- [x] Concurrent uploads/downloads for performance
+- [x] Smart file exclusion patterns
+- [ ] Resume interrupted large file transfers
 - [ ] Web UI for file management
-- [ ] Integration with popular data science tools
 - [ ] Multi-cloud storage support
