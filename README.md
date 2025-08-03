@@ -650,7 +650,8 @@ def detailed_progress(current, total, filename):
 - [x] Complete volume management (create, update, delete)
 - [x] Volume expansion and renaming capabilities
 - [x] Safe deletion with multiple confirmations
-- [ ] Resume interrupted large file transfers
+- [x] Resume interrupted large file transfers
+- [ ] Delete operation (lol) i forgot about that
 - [ ] Web UI for file management
 - [ ] Multi-cloud storage support
 - [ ] Volume snapshots and backups
