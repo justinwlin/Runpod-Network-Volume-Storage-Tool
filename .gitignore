@@ -74,8 +74,9 @@ logs/
 # Temporary files
 *.tmp
 *.temp
-test_*
 temp_*
+# Don't ignore test scripts in examples
+!examples/test_*.py
 
 # API Keys (safety)
 *.key
