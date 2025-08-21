@@ -193,11 +193,11 @@ class TestLargeFileUpload:
             print(f"  Speed: {upload_speed:.1f} MB/s")
             
             self.uploaded_files.append(remote_path)
-            return True, elapsed, upload_speed
+            return True, elapsed, upload_speed, remote_path
             
         except Exception as e:
             print(f"✗ Upload failed: {e}")
-            return False, 0, 0
+            return False, 0, 0, None
     
     def test_download_verify(self, remote_path, original_hash):
         """Test downloading and verify integrity."""
@@ -245,6 +245,64 @@ class TestLargeFileUpload:
         except Exception as e:
             print(f"✗ Download failed: {e}")
             return False, 0, 0
+    
+    def test_chunk_sizes(self):
+        """Test different chunk sizes with a small file to ensure no limitations."""
+        print(f"\n{'='*40}")
+        print("Testing Various Chunk Sizes")
+        print(f"{'='*40}")
+        
+        # Create a small test file (100MB)
+        test_size_mb = 100
+        print(f"\nCreating {test_size_mb}MB test file for chunk size testing...")
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix='_chunk_test.bin') as f:
+            test_file = f.name
+            self.test_files.append(test_file)
+            # Write 100MB of data
+            test_data = os.urandom(test_size_mb * 1024 * 1024)
+            f.write(test_data)
+        
+        print(f"✓ Created test file: {test_size_mb}MB")
+        
+        # Test different chunk sizes
+        chunk_sizes = [
+            (10, "Small chunks (< 1GB files)"),
+            (50, "Medium chunks (1-10GB files)"),
+            (100, "Large chunks (10-50GB files)"),
+            (200, "Extra large chunks (> 50GB files)"),
+        ]
+        
+        all_passed = True
+        
+        for chunk_mb, description in chunk_sizes:
+            chunk_size = chunk_mb * 1024 * 1024
+            remote_path = f"test/chunk_test_{chunk_mb}mb_{datetime.now().strftime('%Y%m%d_%H%M%S')}.bin"
+            
+            print(f"\nTesting {chunk_mb}MB chunks - {description}")
+            
+            try:
+                start_time = time.time()
+                self.api.upload_file(
+                    test_file,
+                    self.test_volume_id,
+                    remote_path,
+                    chunk_size=chunk_size
+                )
+                elapsed = time.time() - start_time
+                
+                print(f"  ✓ Upload successful with {chunk_mb}MB chunks")
+                print(f"    Time: {elapsed:.2f}s")
+                
+                # Clean up the uploaded file
+                self.api.delete_file(self.test_volume_id, remote_path)
+                print(f"  ✓ Cleaned up test file")
+                
+            except Exception as e:
+                print(f"  ✗ Failed with {chunk_mb}MB chunks: {e}")
+                all_passed = False
+        
+        return all_passed
     
     def test_resume_capability(self, file_path):
         """Test resume capability by simulating interrupted upload."""
@@ -313,6 +371,7 @@ class TestLargeFileUpload:
         """Run all tests."""
         test_results = {
             'setup': False,
+            'chunk_sizes': False,
             'file_creation': False,
             'upload': False,
             'download': False,
@@ -326,17 +385,20 @@ class TestLargeFileUpload:
             self.setup()
             test_results['setup'] = True
             
+            # Test different chunk sizes with small file first
+            chunk_test_success = self.test_chunk_sizes()
+            test_results['chunk_sizes'] = chunk_test_success
+            
             # Create test file
             test_file_path, original_hash = self.create_test_file(self.file_size_gb)
             test_results['file_creation'] = True
             
             # Test upload
-            upload_success, upload_time, upload_speed = self.test_upload(test_file_path)
+            upload_success, upload_time, upload_speed, remote_path = self.test_upload(test_file_path)
             test_results['upload'] = upload_success
             
-            if upload_success:
-                # Test download and verify
-                remote_path = f"test/large_file_{self.file_size_gb}gb.bin"
+            if upload_success and remote_path:
+                # Test download and verify using the actual uploaded path
                 download_success, download_time, download_speed = self.test_download_verify(
                     remote_path, original_hash
                 )

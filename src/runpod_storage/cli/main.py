@@ -314,8 +314,8 @@ def list_files(ctx, volume_id, path):
 @click.option(
     "--chunk-size",
     type=int,
-    default=50 * 1024 * 1024,
-    help="Chunk size for large files (default: 50MB)",
+    default=None,
+    help="Chunk size for large files (default: auto-detected based on file size)",
 )
 @click.option(
     "--no-resume",
@@ -954,7 +954,8 @@ def _interactive_upload(api_key, local_path, session_ctx):
             console.print(
                 f"Uploading file [cyan]{local_path}[/cyan] to [green]{volume_id}/{remote_path}[/green]"
             )
-            s3_client.upload_file(str(local_path), volume_id, remote_path)
+            # Let the s3_client auto-detect optimal chunk size
+            s3_client.upload_file(str(local_path), volume_id, remote_path, chunk_size=None)
             console.print("[green]✓[/green] File upload completed successfully!")
 
         elif local_path.is_dir():

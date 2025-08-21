@@ -130,22 +130,56 @@ class RunpodStorageAPI:
         local_path: Union[str, Path],
         volume_id: str,
         remote_path: Optional[str] = None,
-        chunk_size: int = 50 * 1024 * 1024,
+        chunk_size: Optional[int] = None,
     ) -> bool:
-        """Upload a file to a volume.
+        """Upload a file to a volume with automatic chunk size optimization.
 
         Args:
             local_path: Local file path
             volume_id: Volume ID
             remote_path: Remote path (default: filename)
-            chunk_size: Chunk size for large files
+            chunk_size: Chunk size for multipart upload (default: auto-detected)
+                
+                If not specified, automatically selects optimal size:
+                - < 1 GB: 10 MB chunks
+                - 1-10 GB: 50 MB chunks
+                - 10-50 GB: 100 MB chunks
+                - > 50 GB: 200 MB chunks
+                
+                You can override with custom values if needed.
+                Larger chunks = fewer requests but more memory usage.
+                Smaller chunks = more reliable on unstable connections.
 
         Returns:
             True if successful
+            
+        Example:
+            >>> # Simple usage - auto-detects best chunk size
+            >>> api.upload_file("my_file.bin", "vol_123")
+            >>> 
+            >>> # Upload large file - auto-optimizes for size
+            >>> api.upload_file("50gb_dataset.tar", "vol_123")
+            >>> 
+            >>> # Override with custom chunk size if needed
+            >>> api.upload_file("file.bin", "vol_123", chunk_size=25*1024*1024)
         """
         local_path = Path(local_path)
         if remote_path is None:
             remote_path = local_path.name
+
+        # Auto-detect optimal chunk size if not specified
+        if chunk_size is None:
+            file_size = local_path.stat().st_size
+            file_size_gb = file_size / (1024**3)
+            
+            if file_size_gb < 1:
+                chunk_size = 10 * 1024 * 1024      # 10MB for < 1GB
+            elif file_size_gb < 10:
+                chunk_size = 50 * 1024 * 1024      # 50MB for 1-10GB
+            elif file_size_gb < 50:
+                chunk_size = 100 * 1024 * 1024     # 100MB for 10-50GB
+            else:
+                chunk_size = 200 * 1024 * 1024     # 200MB for > 50GB
 
         volume = self.get_volume(volume_id)
         datacenter_id = volume["dataCenterId"]

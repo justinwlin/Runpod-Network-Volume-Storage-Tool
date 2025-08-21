@@ -131,16 +131,16 @@ class RunpodS3Client:
         local_path: str,
         volume_id: str,
         remote_path: str,
-        chunk_size: int = 50 * 1024 * 1024,  # 50MB
+        chunk_size: Optional[int] = None,
         enable_resume: bool = True,
     ) -> bool:
-        """Upload a file to network volume.
+        """Upload a file to network volume with automatic chunk size optimization.
 
         Args:
             local_path: Local file path
             volume_id: Network volume ID
             remote_path: Remote file path in volume
-            chunk_size: Size of chunks for multipart upload
+            chunk_size: Size of chunks for multipart upload (auto-detected if None)
             enable_resume: Enable resume capability for interrupted uploads
 
         Returns:
@@ -156,6 +156,21 @@ class RunpodS3Client:
             )
 
         file_size = local_path.stat().st_size
+        
+        # Auto-detect optimal chunk size if not specified
+        if chunk_size is None:
+            file_size_gb = file_size / (1024**3)
+            
+            if file_size_gb < 1:
+                chunk_size = 10 * 1024 * 1024      # 10MB for < 1GB
+            elif file_size_gb < 10:
+                chunk_size = 50 * 1024 * 1024      # 50MB for 1-10GB
+            elif file_size_gb < 50:
+                chunk_size = 100 * 1024 * 1024     # 100MB for 10-50GB
+            else:
+                chunk_size = 200 * 1024 * 1024     # 200MB for > 50GB
+            
+            logger.debug(f"Auto-detected chunk size: {chunk_size / (1024*1024):.0f}MB for {file_size_gb:.1f}GB file")
 
         # Use simple upload for small files, multipart for large files
         if file_size < chunk_size:
