@@ -182,8 +182,7 @@ class TestLargeFileUpload:
                 file_path,
                 self.test_volume_id,
                 remote_path,
-                chunk_size=chunk_size,
-                enable_resume=True
+                chunk_size=chunk_size
             )
             
             elapsed = time.time() - start_time
@@ -265,8 +264,7 @@ class TestLargeFileUpload:
                 file_path,
                 self.test_volume_id,
                 remote_path,
-                chunk_size=50 * 1024 * 1024,
-                enable_resume=True
+                chunk_size=50 * 1024 * 1024
             )
             print("✓ Upload with resume capability successful")
             self.uploaded_files.append(remote_path)
