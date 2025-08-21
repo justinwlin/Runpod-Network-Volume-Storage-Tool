@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Simple test runner for Runpod Network Storage examples
-# Usage: ./test.sh [creds|quick|full]
+# Usage: ./scripts/run-tests.sh [creds|quick|full]
 
 set -e
 
@@ -10,6 +10,14 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
+
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Get the repository root (parent of scripts directory)
+REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+
+# Change to repository root to ensure paths work correctly
+cd "$REPO_ROOT"
 
 # Get test type from argument
 TEST_TYPE=${1:-creds}
