@@ -1,60 +1,32 @@
-# Self Project
+# Runpod Network Volume Storage Tool
 
-This is a project I just had Claude Code throw together for my own usecase b/c I saw Runpod come out with this:
-https://docs.runpod.io/serverless/storage/s3-api
+A command-line tool for managing Runpod network storage volumes and files. Built to work with Runpod's S3-compatible API for easy file transfers and volume management.
 
-I validated the basics for my use-case, if you find bugs feel free make a PR request.
+## Table of Contents
+- [Getting Started](#getting-started)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Using the Interactive Mode](#using-the-interactive-mode)
+- [File Browser Guide](#file-browser-guide)
+- [Command Line Usage](#command-line-usage)
+- [Python SDK Usage](#python-sdk-usage)
+- [API Server](#api-server)
+- [Troubleshooting](#troubleshooting)
 
-----
-# 🚀 Runpod Storage
+## Getting Started
 
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+This tool provides three ways to interact with Runpod network storage:
+1. **Interactive CLI** - Menu-driven interface with file browser
+2. **Command Line** - Direct commands for automation
+3. **Python SDK** - Programmatic access for scripts
 
-**Runpod Network Storage CLI, SDK, and API server for Runpod network storage management.**
+### Prerequisites
 
-## ✨ Features
+You'll need API keys from [Runpod Console](https://console.runpod.io/user/settings):
+- **Runpod API Key** - For volume management
+- **S3 API Keys** - For file operations (access key + secret key)
 
-- 🎯 **Multi-Interface Access**: CLI, Python SDK, and REST API server
-- 📁 **Directory Sync**: AWS S3-like directory upload/download with progress tracking
-- 🗂️ **Interactive File Browser**: Navigate and manage files like a desktop file manager
-- 🔧 **Complete Volume Management**: Create, update (resize/rename), and delete volumes
-- 🚀 **High Performance**: Robust multipart uploads with retry logic and concurrent transfers
-- 🔒 **Enterprise Security**: Comprehensive authentication and error handling
-- 📚 **OpenAPI Compliant**: Full OpenAPI 3.0 specification with auto-generated docs
-- 🐳 **Production Ready**: Docker support with health checks and monitoring
-- 📖 **Comprehensive Docs**: Extensive documentation with examples and tutorials
-- ⚡ **Zero Config**: Works out of the box with sensible defaults
-- 🎛️ **Smart Exclusions**: Automatically exclude system files (.DS_Store, .git, __pycache__)
-- 🛡️ **Safety First**: Multiple confirmations for destructive operations
-
-## 🏗️ Architecture
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   CLI Tool      │    │   Python SDK    │    │   REST API      │
-│   Interactive   │    │   Programmatic  │    │   Server        │
-│   Commands      │    │   Access        │    │   Integration   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         └───────────────────────┼───────────────────────┘
-                                 │
-                    ┌─────────────────┐
-                    │   Core SDK      │
-                    │   - Runpod API  │
-                    │   - S3 Client   │
-                    │   - Validation  │
-                    │   - Exceptions  │
-                    └─────────────────┘
-                                 │
-                    ┌─────────────────┐
-                    │   Runpod        │
-                    │   Platform      │
-                    └─────────────────┘
-```
-
-## 🚀 Quick Start
-
-### Installation
+## Installation
 
 ```bash
 # Clone the repository
@@ -64,595 +36,854 @@ cd Runpod-Network-Volume-Storage-Tool
 # Install with uv (recommended)
 uv sync
 
-# Or install in development mode
-uv sync --all-extras
+# Or install with pip
+pip install -e .
 ```
 
-### CLI Usage
+## Configuration
+
+Set your API credentials as environment variables:
 
 ```bash
-# Set your API key
-export RUNPOD_API_KEY="your_api_key_here"
+# Required for volume operations
+export RUNPOD_API_KEY="your_runpod_api_key"
 
-# Or pass it directly
-uv run runpod-storage --api-key "your_key" list-volumes
+# Required for file operations
+export RUNPOD_S3_ACCESS_KEY="your_s3_access_key"
+export RUNPOD_S3_SECRET_KEY="your_s3_secret_key"
+```
 
-# Interactive mode (easiest - includes file browser!)
+The tool will prompt for credentials if not set.
+
+## Using the Interactive Mode
+
+The interactive mode is the easiest way to get started:
+
+```bash
 uv run runpod-storage interactive
+```
+
+You'll see a menu with these options:
+
+```
+Runpod Storage Manager
+1. List volumes
+2. Create volume
+3. Update volume
+4. Delete volume
+5. List files
+6. Upload file/directory
+7. Download file/directory
+8. Browse volume files
+9. Exit
+```
+
+### Common Workflows
+
+#### Creating a Volume
+1. Select option 2 (Create volume)
+2. Enter a name for your volume
+3. Specify size in GB (10-4000)
+4. Choose a datacenter location
+
+#### Uploading Files
+1. Select option 6 (Upload file/directory)
+2. Enter the local file/directory path
+3. Select the target volume
+4. For directories, choose whether to delete remote files not present locally
+
+#### Downloading Files
+1. Select option 7 (Download file/directory)
+2. Choose from three download modes:
+   - **Browse & Select** (default) - Navigate and select files interactively
+   - **Direct File** - Download a specific file by path
+   - **Direct Directory** - Download an entire directory by path
+
+## File Browser Guide
+
+The file browser (option 8 or option 7 → Browse & Select) provides an intuitive way to navigate and manage files.
+
+### Navigation Mode
+
+When you start, you're in navigation mode:
+
+```
+📂 File Browser - Volume: your-volume-id
+Path: /
+Mode: NAVIGATION (Press 's' to enter SELECT mode)
+
+Contents
+┏━━━━┳━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
+┃ #  ┃ Type ┃ Name          ┃    Size ┃ Modified         ┃
+┡━━━━╇━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
+│ 1  │ 📁   │ workspace/    │      -- │ --               │
+│ 2  │ 📁   │ data/         │      -- │ --               │
+│ 3  │ 📄   │ config.json   │  1.2 KB │ 2025-08-13 10:30 │
+│ 4  │ 📄   │ readme.txt    │   856 B │ 2025-08-13 09:15 │
+└────┴──────┴───────────────┴─────────┴──────────────────┘
+
+Commands:
+  1     - Enter directory 1
+  d 3   - Quick download item 3
+  d 1 3 - Download multiple items
+  s     - Switch to SELECT mode
+  u     - Go up one level
+  q     - Quit
+```
+
+**Quick Commands in Navigation Mode:**
+- Type a number (e.g., `1`) to enter that directory
+- Type `d` followed by numbers to download items (e.g., `d 3` or `d 1 3 4`)
+- Type `s` to switch to selection mode for more complex operations
+- Type `u` to go up one directory level
+
+### Selection Mode
+
+Press `s` to enter selection mode for batch operations:
+
+```
+Mode: SELECT (Press 'n' to return to NAVIGATION mode)
+Selected: 2 item(s)
+
+Commands:
+  n     - Return to NAVIGATION mode
+  a 3   - Add item 3 to selection
+  r 3   - Remove item 3 from selection
+  aa    - Add all items
+  ra    - Clear selection
+  d     - Download selected items
+  q     - Quit
+```
+
+Selection mode is useful when you want to:
+- Select files from different directories
+- Download multiple files/directories as a single zip
+- Have more control over what gets downloaded
+
+### Download Options
+
+When downloading, you'll be prompted:
+1. **Download as zip?** - Recommended for cloud storage (default: Yes)
+2. **Zip filename** - Name for the downloaded zip file
+
+## Command Line Usage
+
+For automation and scripting, use direct commands:
+
+### Volume Management
+
+```bash
+# List all volumes
+uv run runpod-storage list-volumes
 
 # Create a volume
 uv run runpod-storage create-volume --name "my-storage" --size 50 --datacenter EU-RO-1
 
-# Upload single files
-uv run runpod-storage upload /path/to/file.txt volume-id
-
-# Upload directories (sync functionality)
-uv run runpod-storage upload /path/to/directory volume-id
-
-# Download files
-uv run runpod-storage download volume-id remote/file.txt
-
-# Download directories
-uv run runpod-storage download volume-id remote/directory/ /local/path
+# Delete a volume (use with caution)
+uv run runpod-storage delete-volume volume-id
 ```
 
-### Python SDK
+### File Operations
+
+```bash
+# Upload a file
+uv run runpod-storage upload /path/to/file.txt volume-id
+
+# Upload a directory
+uv run runpod-storage upload /path/to/directory volume-id
+
+# Download a file
+uv run runpod-storage download volume-id remote/file.txt
+
+# List files in a volume
+uv run runpod-storage list-files volume-id
+```
+
+## Python SDK Usage
+
+### Quick Start
 
 ```python
 from runpod_storage import RunpodStorageAPI
 
-# Initialize with API key
-api = RunpodStorageAPI(api_key="your_api_key")
+# Initialize with environment variables
+api = RunpodStorageAPI()
 
-# Or use environment variables
-api = RunpodStorageAPI()  # Uses RUNPOD_API_KEY
-
-# List volumes
-volumes = api.list_volumes()
-print(f"Found {len(volumes)} volumes")
-
-# Create a volume
-volume = api.create_volume("my-storage", 50, "EU-RO-1")
-print(f"Created volume: {volume['id']}")
-
-# Update a volume (rename and/or expand size)
-updated_volume = api.update_volume(volume['id'], name="renamed-storage", size=100)
-print(f"Updated volume: {updated_volume['name']} - {updated_volume['size']} GB")
-
-# Delete a volume (careful - this is irreversible!)
-api.delete_volume(volume['id'])
-print("Volume deleted")
-
-# Upload a single file
-api.upload_file("local_file.txt", volume['id'], "remote_file.txt")
-
-# Upload entire directory (with sync functionality)
-api.upload_directory(
-    "local_directory/",
-    volume['id'],
-    "remote_directory/",
-    exclude_patterns=["*.log", "*.tmp"],
-    delete=True  # Delete remote files not present locally
+# Or provide credentials directly
+api = RunpodStorageAPI(
+    api_key="your_runpod_api_key",
+    s3_access_key="your_s3_access_key",
+    s3_secret_key="your_s3_secret_key"
 )
-
-# List files
-files = api.list_files(volume['id'])
-for file_info in files:
-    print(f"{file_info['key']} - {file_info['size']} bytes")
-
-# Download a single file
-api.download_file(volume['id'], "remote_file.txt", "downloaded_file.txt")
-
-# Download entire directory
-api.download_directory(volume['id'], "remote_directory/", "local_directory/")
 ```
 
-### REST API Server
-
-```bash
-# Start the API server
-uv run runpod-storage-server --host 0.0.0.0 --port 8000
-
-# Or with Docker (build locally)
-docker build -t runpod-storage .
-docker run -p 8000:8000 -e RUNPOD_API_KEY=your_key runpod-storage
-
-# Or with Docker Compose
-docker-compose up -d
-```
-
-Visit `http://localhost:8000/docs` for interactive API documentation.
-
-## 📚 Documentation
-
-### 📋 API Reference
-- [**OpenAPI Specification**](docs/api/openapi.yaml) - Complete API spec
-- **Interactive API Docs** - Start the server and visit `http://localhost:8000/docs`
-
-### 📖 Examples
-- [**Basic Usage**](examples/basic_usage.py) - Python SDK examples
-- [**Volume Management**](examples/volume_management.py) - Create, update, and delete volumes
-- [**Directory Sync**](examples/directory_sync.py) - Upload/download directories with progress tracking
-- [**File Browser CLI**](examples/file_browser_cli.py) - Programmatic file browser implementation
-- [**Server Integration**](examples/server_example.py) - REST API client examples
-
-## 🌍 Available Datacenters
-
-| Datacenter | Region | S3 Endpoint |
-|------------|--------|-------------|
-| `EUR-IS-1` | Iceland | `https://s3api-eur-is-1.runpod.io/` |
-| `EU-RO-1` | Romania | `https://s3api-eu-ro-1.runpod.io/` |
-| `EU-CZ-1` | Czech Republic | `https://s3api-eu-cz-1.runpod.io/` |
-| `US-KS-2` | Kansas, USA | `https://s3api-us-ks-2.runpod.io/` |
-
-## 🔐 Authentication
-
-### API Keys
-
-Get your API keys from the [Runpod Console](https://console.runpod.io/user/settings):
-
-1. **Runpod API Key** - For volume management operations
-2. **S3 API Keys** - For file operations (access key + secret key)
-
-### Environment Variables
-
-```bash
-# Required for volume operations
-export RUNPOD_API_KEY="rpa_your_api_key_here"
-
-# Required for file operations
-export RUNPOD_S3_ACCESS_KEY="user_your_s3_access_key"
-export RUNPOD_S3_SECRET_KEY="rps_your_s3_secret_key"
-```
-
-### Multiple Authentication Methods
-
-```bash
-# CLI flag (highest priority)
-uv run runpod-storage --api-key "your_key" list-volumes
-
-# Environment variable
-export RUNPOD_API_KEY="your_key"
-uv run runpod-storage list-volumes
-
-# Configuration file
-echo "api_key = your_key" > ~/.runpod/config.toml
-```
-
-## 🚀 New Features
-
-### Interactive File Browser
-Navigate your network volumes like a file manager:
-```bash
-uv run runpod-storage interactive
-# Choose option 6: Browse volume files
-```
-
-Features:
-- 📁 Navigate directories with breadcrumb paths
-- 📄 View files with size and modification dates
-- ⬇️ Download files directly from browser
-- 🗑️ Delete files with confirmation prompts
-- 🔍 Real-time directory listing
-
-### Complete Volume Management
-Full lifecycle management of network volumes:
-```bash
-# Interactive mode
-uv run runpod-storage interactive
-
-# Volume operations:
-# 2. Create volume    - Create new volumes with size and datacenter selection
-# 3. Update volume    - Rename volumes or expand storage (size increase only)
-# 4. Delete volume    - Safely delete with multiple confirmations
-```
-
-### Directory Sync (AWS S3-like)
-Upload and download entire directories with smart sync:
-```bash
-# Interactive mode
-uv run runpod-storage interactive
-# Choose option 6: Upload file/directory
-
-# Automatically detects directories and offers:
-# - Progress tracking for each file
-# - Exclude patterns (.DS_Store, .git/, __pycache__)
-# - Option to delete remote files not present locally
-# - Concurrent uploads for speed
-```
-
-## 📊 Examples
-
-### Volume Management Operations
+### Volume Management
 
 ```python
 from runpod_storage import RunpodStorageAPI
 
 api = RunpodStorageAPI()
 
-# Create a new volume
-volume = api.create_volume(
-    name="my-project-storage",
-    size=50,  # GB
-    datacenter="EU-RO-1"
-)
-print(f"Created volume: {volume['id']}")
-
-# Update volume name
-updated = api.update_volume(volume['id'], name="renamed-project-storage")
-print(f"Renamed to: {updated['name']}")
-
-# Expand volume size (only increases allowed)
-expanded = api.update_volume(volume['id'], size=100)  # Expand to 100GB
-print(f"Expanded to: {expanded['size']} GB")
-
-# Update both name and size
-updated = api.update_volume(
-    volume['id'],
-    name="large-project-storage",
-    size=200
-)
-print(f"Updated: {updated['name']} - {updated['size']} GB")
-
-# List all volumes with details
+# List all volumes
 volumes = api.list_volumes()
 for vol in volumes:
     print(f"Volume: {vol['id']} ({vol['name']}) - {vol['size']} GB in {vol['dataCenterId']}")
 
-# Delete volume (be careful!)
-# api.delete_volume(volume['id'])  # Uncomment to actually delete
+# Create a new volume
+volume = api.create_volume(
+    name="ml-datasets",
+    size=100,  # GB
+    datacenter="EU-RO-1"  # or "US-KS-2", "EU-CZ-1", "EUR-IS-1"
+)
+print(f"Created volume: {volume['id']}")
+
+# Get specific volume details
+volume_info = api.get_volume(volume['id'])
+print(f"Volume {volume_info['name']} has {volume_info['size']} GB")
+
+# Update volume (rename and/or expand)
+updated = api.update_volume(
+    volume['id'],
+    name="ml-datasets-v2",  # New name (optional)
+    size=200  # Expand to 200 GB (optional, must be larger than current)
+)
+print(f"Updated: {updated['name']} - {updated['size']} GB")
+
+# Delete volume (use with caution!)
+# api.delete_volume(volume['id'])
 ```
 
-### Directory Sync Operations
+### File Upload Operations
 
 ```python
 from runpod_storage import RunpodStorageAPI
+import os
 
 api = RunpodStorageAPI()
+volume_id = "your-volume-id"
 
-# Smart directory upload with progress tracking
-def upload_callback(current, total, filename):
-    print(f"[{current}/{total}] Uploading: {filename}")
+# Upload a single file
+api.upload_file("data.csv", volume_id, "datasets/data.csv")
 
-api.upload_directory(
-    "my_project/",           # Local directory
-    "volume-id",             # Target volume
-    "backup/my_project/",    # Remote path
-    exclude_patterns=[       # Skip these files
-        "*.log", "*.tmp", "node_modules/*",
-        ".git/*", "__pycache__/*"
-    ],
-    delete=True,             # Remove remote files not in local
-    progress_callback=upload_callback
-)
-
-# Download entire directory structure
-def download_callback(current, total, filename):
-    print(f"[{current}/{total}] Downloaded: {filename}")
-
-api.download_directory(
-    "volume-id",
-    "backup/my_project/",    # Remote directory
-    "restored_project/",     # Local destination
-    progress_callback=download_callback
-)
-```
-
-### Interactive CLI Workflow
-
-```bash
-$ uv run runpod-storage interactive
-
-Runpod Storage Manager
-1. List volumes
-2. Create volume
-3. Update volume            ← NEW: Rename or expand volume size
-4. Delete volume            ← NEW: Delete volume with confirmations
-5. List files
-6. Upload file/directory    ← Handles both files & directories
-7. Download file/directory  ← Handles both files & directories
-8. Browse volume files      ← Interactive file browser
-9. Exit
-
-Choose action [1/2/3/4/5/6/7/8/9] (1): 8
-
-File Browser - Volume: my-volume-id
-Current path: /
-
-Directories:
-  📁 projects/
-  📁 backups/
-
-Files:
-┏━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┓
-┃ Name         ┃ Size    ┃ Modified           ┃
-┡━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━┩
-│ readme.txt   │ 1.2 KB  │ 2024-01-15 14:30   │
-│ config.json  │ 856 B   │ 2024-01-15 12:15   │
-└──────────────┴─────────┴────────────────────┘
-
-Actions:
-1. Enter directory
-2. Go up one level
-3. Download file
-4. Delete file
-5. Exit browser
-```
-
-### Basic File Management
-
-```python
-from runpod_storage import RunpodStorageAPI
-
-api = RunpodStorageAPI()
-
-# Create volume and upload multiple files
-volume = api.create_volume("data-backup", 100, "EU-RO-1")
-volume_id = volume["id"]
-
-files_to_upload = [
-    ("local/data.csv", "datasets/data.csv"),
-    ("local/model.pkl", "models/model.pkl"),
-    ("local/config.json", "config/config.json")
-]
-
-for local_path, remote_path in files_to_upload:
-    print(f"Uploading {local_path} to {remote_path}...")
-    api.upload_file(local_path, volume_id, remote_path)
-    print("✓ Upload complete")
-
-# List and download files
-print("\nFiles in volume:")
-files = api.list_files(volume_id)
-for file_info in files:
-    print(f"  {file_info['key']} ({file_info['size']} bytes)")
-
-    # Download file
-    local_name = f"downloaded_{file_info['key'].replace('/', '_')}"
-    api.download_file(volume_id, file_info['key'], local_name)
-    print(f"  ✓ Downloaded to {local_name}")
-```
-
-### Large File Upload with Progress
-
-```python
-import time
-from runpod_storage import RunpodStorageAPI
-
-api = RunpodStorageAPI()
-
-# Upload large file with custom chunk size
-def upload_with_progress(local_path, volume_id, remote_path):
-    file_size = os.path.getsize(local_path)
-    print(f"Uploading {file_size / (1024**3):.2f} GB file...")
-
-    start_time = time.time()
-
-    # Use 100MB chunks for large files
-    chunk_size = 100 * 1024 * 1024
-    api.upload_file(local_path, volume_id, remote_path, chunk_size)
-
-    elapsed = time.time() - start_time
-    speed = (file_size / (1024**2)) / elapsed  # MB/s
-    print(f"✓ Upload completed in {elapsed:.1f}s ({speed:.1f} MB/s)")
-
-upload_with_progress("large_dataset.zip", volume_id, "data/large_dataset.zip")
-```
-
-### Error Handling
-
-```python
-from runpod_storage import (
-    RunpodStorageAPI,
-    VolumeNotFoundError,
-    InsufficientStorageError,
-    AuthenticationError
-)
-
-api = RunpodStorageAPI()
-
-try:
-    # Attempt operations with proper error handling
-    volume = api.get_volume("invalid-volume-id")
-except VolumeNotFoundError as e:
-    print(f"Volume not found: {e.volume_id}")
-except AuthenticationError:
-    print("Invalid API key - check your credentials")
-except InsufficientStorageError:
-    print("Not enough storage space available")
-except Exception as e:
-    print(f"Unexpected error: {e}")
-```
-
-## 🐳 Docker Deployment
-
-### Simple Deployment
-
-```bash
-# Pull and run the API server
-docker run -d \
-  --name runpod-storage-api \
-  -p 8000:8000 \
-  -e RUNPOD_API_KEY="your_api_key" \
-  -e RUNPOD_S3_ACCESS_KEY="your_s3_key" \
-  -e RUNPOD_S3_SECRET_KEY="your_s3_secret" \
-  runpod/storage-api
-```
-
-### Production Deployment
-
-```yaml
-# docker-compose.yml
-version: '3.8'
-services:
-  api:
-    image: runpod/storage-api:latest
-    ports:
-      - "8000:8000"
-    environment:
-      - RUNPOD_API_KEY=${RUNPOD_API_KEY}
-      - RUNPOD_S3_ACCESS_KEY=${RUNPOD_S3_ACCESS_KEY}
-      - RUNPOD_S3_SECRET_KEY=${RUNPOD_S3_SECRET_KEY}
-    volumes:
-      - ./logs:/app/logs
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - api
-    restart: unless-stopped
-```
-
-## 🛠️ Development
-
-### Setup Development Environment
-
-```bash
-# Install with uv (recommended)
-uv sync --all-extras
-
-# Or create virtual environment manually
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -e ".[dev]"
-```
-
-### Running Tests
-
-```bash
-# Run all tests
-uv run pytest
-
-# Run with coverage
-uv run pytest --cov=src --cov-report=html
-
-# Run specific test categories
-uv run pytest tests/unit/
-uv run pytest tests/integration/
-uv run pytest tests/e2e/
-```
-
-### Code Quality
-
-```bash
-# Format code
-uv run black src tests
-uv run ruff check --fix src tests
-
-# Type checking
-uv run mypy src
-
-# Security scan
-uv run bandit -r src/
-```
-
-### API Documentation
-
-```bash
-# Start the API server to access interactive docs
-uv run runpod-storage-server
-
-# Visit http://localhost:8000/docs for interactive documentation
-# OpenAPI spec available at: docs/api/openapi.yaml
-```
-
-## 🔧 Troubleshooting
-
-### Volume Management Issues
-
-**"Cannot decrease volume size" error:**
-- ✅ Volume sizes can only be increased, never decreased
-- ✅ If you need less space, create a new smaller volume and migrate data
-- ✅ Use the update function with a size larger than current size
-
-**Volume deletion not working:**
-- ✅ Ensure the volume exists and you have permission to delete it
-- ✅ Use the interactive CLI for safe deletion with multiple confirmations
-- ✅ Check that no pods are currently using the volume
-
-**Volume update fails:**
-- ✅ Name updates: Ensure new name doesn't conflict (though duplicates are allowed)
-- ✅ Size updates: New size must be larger than current size
-- ✅ Check datacenter capacity if expanding to very large sizes
-
-### Directory Upload Issues
-
-**"Path is a directory" error when using CLI:**
-- ✅ Use the interactive mode: `uv run runpod-storage interactive` → option 4
-- ✅ The system will automatically detect directories and offer sync options
-
-**Slow directory uploads:**
-- ✅ Large directories use concurrent uploads (4 threads by default)
-- ✅ Check your network connection and Runpod datacenter proximity
-- ✅ Consider using exclude patterns to skip unnecessary files
-
-**Files not uploading:**
-- ✅ Check exclude patterns - `.DS_Store`, `.git/`, `__pycache__/` are automatically excluded
-- ✅ Verify file permissions and that files aren't locked
-- ✅ Check available space on your network volume
-
-### File Browser Issues
-
-**"No files found" in browser:**
-- ✅ Files may be in subdirectories - navigate using option 1
-- ✅ Check if files were uploaded to a specific path
-- ✅ Verify S3 API keys have proper permissions
-
-**Browser navigation problems:**
-- ✅ Use breadcrumb path to understand current location: `/path/to/current`
-- ✅ Use option 2 to go up directories
-- ✅ Refresh (option 5 → return) if directory listing seems stale
-
-### Performance Optimization
-
-**Speed up large transfers:**
-```python
-# Increase concurrent workers for very large directories
-api.upload_directory(
-    "large_directory/",
+# Upload with custom chunk size for large files
+api.upload_file(
+    "large_model.bin",
     volume_id,
-    "remote_path/",
-    # Use more aggressive exclusions
+    "models/large_model.bin",
+    chunk_size=100 * 1024 * 1024  # 100MB chunks
+)
+
+# Upload entire directory with progress tracking
+def progress_callback(current, total, filename):
+    percent = (current / total) * 100
+    print(f"[{current}/{total}] {percent:.1f}% - Uploading: {filename}")
+
+api.upload_directory(
+    "my_project/",
+    volume_id,
+    "projects/my_project/",
+    exclude_patterns=["*.log", "*.tmp", ".git/*", "__pycache__/*"],
+    delete=True,  # Remove remote files not in local directory
+    progress_callback=progress_callback
+)
+
+# Upload with automatic exclusions
+api.upload_directory(
+    "ml_code/",
+    volume_id,
+    "code/",
     exclude_patterns=[
-        "*.log", "*.tmp", "node_modules/*", ".git/*",
-        "*.pyc", "__pycache__/*", ".DS_Store", "*.cache"
+        "*.pyc",           # Compiled Python files
+        "__pycache__/*",   # Python cache directories
+        ".git/*",          # Git repository data
+        ".DS_Store",       # macOS system files
+        "*.log",           # Log files
+        "node_modules/*",  # Node.js dependencies
+        "*.tmp",           # Temporary files
+        ".venv/*",         # Virtual environment
     ]
 )
 ```
 
-**Monitor transfer progress:**
-```python
-def detailed_progress(current, total, filename):
-    percent = (current / total) * 100
-    print(f"[{current:4d}/{total:4d}] {percent:6.2f}% - {filename}")
+### File Download Operations
 
-    # Log to file for large transfers
-    with open("transfer.log", "a") as f:
-        f.write(f"{filename} - {percent:.2f}%\n")
+```python
+from runpod_storage import RunpodStorageAPI
+from pathlib import Path
+
+api = RunpodStorageAPI()
+volume_id = "your-volume-id"
+
+# Download a single file
+api.download_file(volume_id, "models/model.pkl", "local_model.pkl")
+
+# Download entire directory
+api.download_directory(
+    volume_id,
+    "projects/my_project/",  # Remote directory
+    "downloaded_project/",    # Local destination
+)
+
+# Download with progress tracking
+def download_progress(current, total, filename):
+    percent = (current / total) * 100
+    print(f"[{current}/{total}] {percent:.1f}% - Downloaded: {filename}")
+
+api.download_directory(
+    volume_id,
+    "datasets/",
+    "local_datasets/",
+    progress_callback=download_progress
+)
+
+# List and selectively download files
+files = api.list_files(volume_id, "models/")
+for file_info in files:
+    if file_info['size'] < 100 * 1024 * 1024:  # Only files under 100MB
+        local_path = Path("downloads") / Path(file_info['key']).name
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        api.download_file(volume_id, file_info['key'], str(local_path))
+        print(f"Downloaded: {file_info['key']}")
 ```
 
-## 🎯 Roadmap
+### File Listing and Management
 
-- [x] Directory sync with AWS S3-like functionality
-- [x] Interactive file browser with navigation
-- [x] Concurrent uploads/downloads for performance
-- [x] Smart file exclusion patterns
-- [x] Complete volume management (create, update, delete)
-- [x] Volume expansion and renaming capabilities
-- [x] Safe deletion with multiple confirmations
-- [x] Resume interrupted large file transfers
-- [ ] Delete operation (lol) i forgot about that
-- [ ] Web UI for file management
-- [ ] Multi-cloud storage support
-- [ ] Volume snapshots and backups
-- [ ] Automated backup scheduling
+```python
+from runpod_storage import RunpodStorageAPI
+from datetime import datetime
+
+api = RunpodStorageAPI()
+volume_id = "your-volume-id"
+
+# List all files in volume
+all_files = api.list_files(volume_id)
+print(f"Total files: {len(all_files)}")
+
+# List files in specific directory
+project_files = api.list_files(volume_id, "projects/my_project/")
+for file_info in project_files:
+    size_mb = file_info['size'] / (1024 * 1024)
+    modified = file_info['last_modified'].strftime("%Y-%m-%d %H:%M")
+    print(f"{file_info['key']} - {size_mb:.2f} MB - Modified: {modified}")
+
+# Find large files
+large_files = [f for f in all_files if f['size'] > 100 * 1024 * 1024]
+print(f"Files over 100MB: {len(large_files)}")
+
+# Find recently modified files
+from datetime import datetime, timedelta
+recent_date = datetime.now() - timedelta(days=7)
+recent_files = [
+    f for f in all_files 
+    if f['last_modified'].replace(tzinfo=None) > recent_date
+]
+print(f"Files modified in last 7 days: {len(recent_files)}")
+
+# Delete specific files
+api.delete_file(volume_id, "temp/old_file.tmp")
+
+# Delete multiple files matching pattern
+for file_info in all_files:
+    if file_info['key'].endswith('.tmp'):
+        api.delete_file(volume_id, file_info['key'])
+        print(f"Deleted: {file_info['key']}")
+```
+
+## Handling Large Files
+
+### Overview
+
+The tool supports large file uploads with automatic chunking, resume capability, and multipart uploads. Files over 5GB are automatically handled with multipart upload, and interrupted transfers can be resumed.
+
+### Interactive Mode (Easiest for Large Files)
+
+The interactive mode handles large files automatically:
+
+```bash
+uv run runpod-storage interactive
+```
+
+1. Select option 6 (Upload file/directory)
+2. Enter the path to your large file
+3. The system will:
+   - Automatically detect file size
+   - Use multipart upload for files over 5GB
+   - Show progress during upload
+   - Resume if interrupted (unless --no-resume is used)
+
+**Example session:**
+```
+Runpod Storage Manager
+Choose action: 6
+
+Local file/directory path: /path/to/large_dataset.tar.gz
+Select volume: 1
+
+Uploading file [cyan]/path/to/large_dataset.tar.gz[/cyan] to [green]volume-id/large_dataset.tar.gz[/green]
+File size: 25.3 GB - Using multipart upload
+[████████████████████░░░░░░░░░░] 65% - 16.4 GB / 25.3 GB
+Upload speed: 45.2 MB/s - ETA: 3m 20s
+```
+
+### Command Line Upload
+
+For automation and scripts, use the CLI with chunk size options:
+
+```bash
+# Basic large file upload (auto-detects optimal settings)
+uv run runpod-storage upload /path/to/50gb_file.bin volume-id
+
+# Specify custom chunk size (for very large files)
+uv run runpod-storage upload /path/to/huge_file.bin volume-id \
+  --chunk-size 104857600  # 100MB chunks
+
+# Upload with resume capability (default enabled)
+uv run runpod-storage upload /path/to/large_file.tar volume-id
+
+# Disable resume if you want fresh upload
+uv run runpod-storage upload /path/to/large_file.tar volume-id --no-resume
+
+# Upload large directory as compressed archive
+tar czf - /path/to/large_directory | \
+  uv run runpod-storage upload - volume-id --remote-path archive.tar.gz
+```
+
+### Programmatic Upload (Python SDK)
+
+For maximum control over large file uploads:
+
+```python
+from runpod_storage import RunpodStorageAPI
+import os
+import time
+from pathlib import Path
+
+api = RunpodStorageAPI()
+volume_id = "your-volume-id"
+
+# Basic large file upload with optimal chunk size
+def upload_large_file(local_path, volume_id, remote_path):
+    """Upload large file with progress tracking"""
+    file_size = os.path.getsize(local_path)
+    file_size_gb = file_size / (1024**3)
+    
+    print(f"Uploading {file_size_gb:.2f} GB file: {local_path}")
+    
+    # Choose chunk size based on file size
+    if file_size_gb < 1:
+        chunk_size = 5 * 1024 * 1024      # 5MB chunks for < 1GB
+    elif file_size_gb < 10:
+        chunk_size = 50 * 1024 * 1024     # 50MB chunks for 1-10GB
+    elif file_size_gb < 50:
+        chunk_size = 100 * 1024 * 1024    # 100MB chunks for 10-50GB
+    else:
+        chunk_size = 200 * 1024 * 1024    # 200MB chunks for > 50GB
+    
+    start_time = time.time()
+    
+    # Upload with automatic multipart handling
+    api.upload_file(
+        local_path,
+        volume_id,
+        remote_path,
+        chunk_size=chunk_size,
+        enable_resume=True  # Enable resume capability
+    )
+    
+    elapsed = time.time() - start_time
+    speed_mbps = (file_size / (1024**2)) / elapsed
+    
+    print(f"✓ Upload completed in {elapsed:.1f}s ({speed_mbps:.1f} MB/s)")
+
+# Advanced upload with progress callback
+class UploadProgress:
+    def __init__(self, total_size):
+        self.total_size = total_size
+        self.uploaded = 0
+        self.start_time = time.time()
+    
+    def callback(self, bytes_uploaded):
+        """Progress callback for multipart uploads"""
+        self.uploaded += bytes_uploaded
+        percent = (self.uploaded / self.total_size) * 100
+        
+        elapsed = time.time() - self.start_time
+        speed = self.uploaded / elapsed / (1024**2)  # MB/s
+        eta = (self.total_size - self.uploaded) / (self.uploaded / elapsed)
+        
+        print(f"\rProgress: {percent:.1f}% - {speed:.1f} MB/s - ETA: {eta:.0f}s", end="")
+
+def upload_with_progress(local_path, volume_id, remote_path):
+    """Upload large file with detailed progress tracking"""
+    file_size = os.path.getsize(local_path)
+    progress = UploadProgress(file_size)
+    
+    # For S3Client with progress (if using boto3 directly)
+    from runpod_storage.core.s3_client import RunpodS3Client
+    
+    # Initialize S3 client
+    s3_client = RunpodS3Client(
+        access_key=os.getenv("RUNPOD_S3_ACCESS_KEY"),
+        secret_key=os.getenv("RUNPOD_S3_SECRET_KEY"),
+        region="EU-RO-1",
+        endpoint_url="https://s3api-eu-ro-1.runpod.io/"
+    )
+    
+    # Upload with progress callback
+    s3_client.upload_file_multipart(
+        local_path,
+        volume_id,
+        remote_path,
+        chunk_size=100 * 1024 * 1024,
+        progress_callback=progress.callback
+    )
+    
+    print("\n✓ Upload complete!")
+
+# Batch upload large files
+def upload_large_dataset(dataset_dir, volume_id):
+    """Upload multiple large files efficiently"""
+    dataset_path = Path(dataset_dir)
+    large_files = [f for f in dataset_path.glob("*.tar.gz") if f.stat().st_size > 1024**3]
+    
+    print(f"Found {len(large_files)} large files to upload")
+    
+    for i, file_path in enumerate(large_files, 1):
+        file_size_gb = file_path.stat().st_size / (1024**3)
+        print(f"\n[{i}/{len(large_files)}] Uploading {file_path.name} ({file_size_gb:.1f} GB)")
+        
+        remote_path = f"datasets/{file_path.name}"
+        upload_large_file(str(file_path), volume_id, remote_path)
+
+# Resume interrupted upload
+def resume_upload(local_path, volume_id, remote_path):
+    """Resume an interrupted upload"""
+    try:
+        # Check if partial upload exists
+        api.upload_file(
+            local_path,
+            volume_id,
+            remote_path,
+            chunk_size=100 * 1024 * 1024,
+            enable_resume=True
+        )
+        print("✓ Upload resumed and completed")
+    except Exception as e:
+        print(f"Error resuming upload: {e}")
+        print("Starting fresh upload...")
+        api.upload_file(
+            local_path,
+            volume_id,
+            remote_path,
+            chunk_size=100 * 1024 * 1024,
+            enable_resume=False  # Force fresh upload
+        )
+```
+
+### Optimizing Large Transfers
+
+#### Best Practices
+
+1. **Choose the Right Chunk Size:**
+   - < 1 GB files: 5-10 MB chunks
+   - 1-10 GB files: 50 MB chunks
+   - 10-50 GB files: 100 MB chunks
+   - > 50 GB files: 200 MB chunks
+
+2. **Network Optimization:**
+   ```bash
+   # Test your upload speed first
+   uv run runpod-storage upload test-file.bin volume-id --benchmark
+   
+   # Choose nearest datacenter for better speed
+   # US users: US-KS-2
+   # EU users: EU-RO-1, EU-CZ-1, or EUR-IS-1
+   ```
+
+3. **Compression Before Upload:**
+   ```bash
+   # Compress before uploading (can reduce size by 50-90%)
+   tar czf dataset.tar.gz dataset/
+   uv run runpod-storage upload dataset.tar.gz volume-id
+   
+   # Or use higher compression
+   tar cJf dataset.tar.xz dataset/  # xz compression (slower but smaller)
+   7z a -mx=9 dataset.7z dataset/   # 7zip maximum compression
+   ```
+
+4. **Parallel Uploads for Multiple Files:**
+   ```python
+   from concurrent.futures import ThreadPoolExecutor
+   import threading
+   
+   api = RunpodStorageAPI()
+   upload_lock = threading.Lock()
+   
+   def upload_file_thread(file_path, volume_id, remote_path):
+       """Thread-safe file upload"""
+       try:
+           api.upload_file(file_path, volume_id, remote_path)
+           with upload_lock:
+               print(f"✓ Uploaded: {file_path}")
+       except Exception as e:
+           with upload_lock:
+               print(f"✗ Failed: {file_path} - {e}")
+   
+   # Upload multiple large files in parallel
+   files_to_upload = [
+       ("file1.bin", "data/file1.bin"),
+       ("file2.bin", "data/file2.bin"),
+       ("file3.bin", "data/file3.bin"),
+   ]
+   
+   with ThreadPoolExecutor(max_workers=3) as executor:
+       futures = []
+       for local_path, remote_path in files_to_upload:
+           future = executor.submit(upload_file_thread, local_path, volume_id, remote_path)
+           futures.append(future)
+       
+       # Wait for all uploads to complete
+       for future in futures:
+           future.result()
+   ```
+
+#### Monitoring Transfers
+
+```python
+# Monitor upload with detailed statistics
+import psutil
+import threading
+
+def monitor_upload(local_path, volume_id, remote_path):
+    """Monitor system resources during upload"""
+    stop_monitoring = threading.Event()
+    
+    def monitor_thread():
+        while not stop_monitoring.is_set():
+            cpu = psutil.cpu_percent(interval=1)
+            memory = psutil.virtual_memory().percent
+            network = psutil.net_io_counters()
+            upload_speed = network.bytes_sent / (1024**2)  # MB
+            
+            print(f"\rCPU: {cpu}% | RAM: {memory}% | Uploaded: {upload_speed:.1f} MB", end="")
+    
+    # Start monitoring
+    monitor = threading.Thread(target=monitor_thread)
+    monitor.start()
+    
+    try:
+        # Perform upload
+        api.upload_file(local_path, volume_id, remote_path, chunk_size=100*1024*1024)
+        print("\n✓ Upload complete!")
+    finally:
+        stop_monitoring.set()
+        monitor.join()
+```
+
+#### Handling Failures
+
+```python
+# Robust upload with retry and resume
+def reliable_large_upload(local_path, volume_id, remote_path, max_retries=3):
+    """Upload large file with automatic retry and resume"""
+    import time
+    
+    for attempt in range(max_retries):
+        try:
+            print(f"Upload attempt {attempt + 1}/{max_retries}")
+            
+            api.upload_file(
+                local_path,
+                volume_id,
+                remote_path,
+                chunk_size=100 * 1024 * 1024,
+                enable_resume=True  # Resume from last successful chunk
+            )
+            
+            print("✓ Upload successful!")
+            return True
+            
+        except Exception as e:
+            print(f"✗ Attempt {attempt + 1} failed: {e}")
+            
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt  # Exponential backoff
+                print(f"Waiting {wait_time} seconds before retry...")
+                time.sleep(wait_time)
+            else:
+                print("✗ Upload failed after all retries")
+                return False
+    
+    return False
+
+# Usage
+success = reliable_large_upload(
+    "/path/to/50gb_dataset.tar.gz",
+    "volume-id",
+    "datasets/training_data.tar.gz"
+)
+```
+
+### Troubleshooting Large Uploads
+
+**Upload fails midway:**
+- The tool supports resume by default for files > 100MB
+- Simply run the same upload command again to resume
+- Use `--no-resume` flag to start fresh if needed
+
+**"Request timeout" errors:**
+- Increase chunk size for better efficiency
+- Check your internet connection stability
+- Consider uploading during off-peak hours
+
+**"Insufficient storage" errors:**
+- Check volume size: `uv run runpod-storage list-volumes`
+- Expand volume if needed: `api.update_volume(volume_id, size=new_size)`
+- Delete unnecessary files first
+
+**Slow upload speeds:**
+- Choose the datacenter closest to you
+- Compress files before uploading
+- Use wired connection instead of WiFi
+- Upload during off-peak hours for better bandwidth
+
+## API Server
+
+To run as a REST API server:
+
+```bash
+# Start the server
+uv run runpod-storage-server --host 0.0.0.0 --port 8000
+
+# Visit http://localhost:8000/docs for API documentation
+```
+
+### Docker Deployment
+
+```bash
+# Build and run with Docker
+docker build -t runpod-storage .
+docker run -p 8000:8000 \
+  -e RUNPOD_API_KEY=your_key \
+  -e RUNPOD_S3_ACCESS_KEY=your_s3_key \
+  -e RUNPOD_S3_SECRET_KEY=your_s3_secret \
+  runpod-storage
+```
+
+## Available Datacenters
+
+| Datacenter | Location | Endpoint |
+|------------|----------|----------|
+| EUR-IS-1 | Iceland | https://s3api-eur-is-1.runpod.io/ |
+| EU-RO-1 | Romania | https://s3api-eu-ro-1.runpod.io/ |
+| EU-CZ-1 | Czech Republic | https://s3api-eu-cz-1.runpod.io/ |
+| US-KS-2 | Kansas, USA | https://s3api-us-ks-2.runpod.io/ |
+
+## Troubleshooting
+
+### Authentication Issues
+
+**"Invalid API key" error:**
+- Verify your API key is correct
+- Check that environment variables are set
+- Try passing the key directly: `--api-key your_key`
+
+**"S3 credentials required" error:**
+- File operations need S3 credentials in addition to the API key
+- Set both `RUNPOD_S3_ACCESS_KEY` and `RUNPOD_S3_SECRET_KEY`
+
+### Volume Operations
+
+**"Cannot decrease volume size" error:**
+- Volumes can only be expanded, not shrunk
+- Create a new smaller volume if needed
+
+**Volume not found:**
+- Verify the volume ID is correct
+- Check that the volume exists in your account
+- Use `list-volumes` to see available volumes
+
+### File Transfer Issues
+
+**Slow uploads/downloads:**
+- Consider using zip downloads for multiple files
+- Check your internet connection speed
+- Choose a datacenter closer to your location
+
+**"Path not found" errors:**
+- Use the file browser to verify the correct path
+- Remember paths are case-sensitive
+- Don't include leading slashes for relative paths
+
+### File Browser Issues
+
+**Can't see files:**
+- Make sure you're in the correct directory
+- Check that files have been uploaded to the volume
+- Verify S3 credentials have proper permissions
+
+**Download fails:**
+- Ensure you have write permissions in the download directory
+- Check available disk space
+- Try downloading as zip if individual files fail
+
+## Examples
+
+### Backing Up a Project
+
+```python
+from runpod_storage import RunpodStorageAPI
+import datetime
+
+api = RunpodStorageAPI()
+
+# Create a backup volume if it doesn't exist
+volumes = api.list_volumes()
+backup_volume = None
+for v in volumes:
+    if v['name'] == 'project-backups':
+        backup_volume = v
+        break
+
+if not backup_volume:
+    backup_volume = api.create_volume('project-backups', 100, 'EU-RO-1')
+
+# Upload with timestamp
+timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+api.upload_directory(
+    'my_project/',
+    backup_volume['id'],
+    f'backups/{timestamp}/',
+    exclude_patterns=['*.tmp', '*.log', '__pycache__/*', '.git/*']
+)
+print(f"Backup completed: backups/{timestamp}/")
+```
+
+### Batch Download Files
+
+Using the interactive file browser:
+1. Run `uv run runpod-storage interactive`
+2. Select option 7 (Download file/directory)
+3. Choose option 1 (Browse & Select)
+4. Navigate to your files
+5. Press `s` to enter selection mode
+6. Use `a 1`, `a 2`, etc. to select files
+7. Press `d` to download all as a zip
+
+Or use quick download in navigation mode:
+- Type `d 1 3 5 7` to download items 1, 3, 5, and 7 as a single zip
+
+## Support
+
+For issues or questions:
+- Check the [GitHub repository](https://github.com/justinwlin/Runpod-Network-Volume-Storage-Tool)
+- Review Runpod's [S3 API documentation](https://docs.runpod.io/serverless/storage/s3-api)
+- Ensure your API keys have the necessary permissions
+
+## License
+
+MIT License - See LICENSE file for details
+
+## Notes
+
+This tool was created for personal use to work with Runpod's network storage API. Feel free to submit pull requests for bug fixes or improvements.

@@ -3,6 +3,8 @@
 import logging
 import os
 import sys
+import tempfile
+import zipfile
 from pathlib import Path
 
 import click
@@ -1028,65 +1030,639 @@ def _interactive_download(api_key, session_ctx):
             endpoint_url=endpoint_url,
         )
 
-        # Ask what to download
-        download_type = Prompt.ask(
-            "Download type", choices=["file", "directory"], default="file"
+        # Show download options with explanations
+        console.print("\n[bold]Download Options:[/bold]")
+        console.print("1. [cyan]Browse & Select[/cyan] - Navigate folders and select files to download")
+        console.print("   (Start in navigation mode, press 's' to switch to selection mode)")
+        console.print("2. [cyan]Direct File[/cyan] - Download a specific file (you need to know the path)")
+        console.print("3. [cyan]Direct Directory[/cyan] - Download an entire directory (you need to know the path)")
+        
+        choice = Prompt.ask(
+            "\nSelect download method",
+            choices=["1", "2", "3"],
+            default="1"
         )
 
-        if download_type == "file":
-            # Single file download
-            files = s3_client.list_files(volume_id)
-            if not files:
-                console.print("[yellow]No files found in volume.[/yellow]")
-                return
-
-            console.print("Available files:")
-            for i, file_info in enumerate(files):
-                size = file_info["size"]
-                if size < 1024 * 1024:
-                    size_str = f"{size / 1024:.1f} KB"
-                elif size < 1024 * 1024 * 1024:
-                    size_str = f"{size / (1024 * 1024):.1f} MB"
-                else:
-                    size_str = f"{size / (1024 * 1024 * 1024):.1f} GB"
-                console.print(f"  {i+1}. {file_info['key']} ({size_str})")
-
-            choice = Prompt.ask(
-                "Select file",
-                choices=[str(i + 1) for i in range(len(files))],
-                default="1",
-            )
-            remote_path = files[int(choice) - 1]["key"]
-            local_path = Prompt.ask("Local path", default=Path(remote_path).name)
-
-            console.print(
-                f"Downloading [cyan]{volume_id}/{remote_path}[/cyan] to [green]{local_path}[/green]"
-            )
-            s3_client.download_file(volume_id, remote_path, local_path)
-            console.print("[green]✓[/green] File download completed successfully!")
-
-        else:
-            # Directory download
-            remote_dir = Prompt.ask(
-                "Remote directory path (leave empty for root)", default=""
-            )
-            local_dir = Prompt.ask("Local directory path")
-
-            console.print(
-                f"Downloading directory [cyan]{volume_id}/{remote_dir}[/cyan] to [green]{local_dir}[/green]"
-            )
-
-            def progress_callback(current, total, filename):
-                percent = (current / total) * 100
+        if choice == "1":
+            # Browse and select mode
+            _browse_and_download(s3_client, volume_id, session_ctx)
+        elif choice == "2":
+            # Direct file download - user knows the path
+            remote_path = Prompt.ask("Enter the exact file path to download")
+            local_path = Prompt.ask("Local path to save", default=Path(remote_path).name)
+            
+            try:
                 console.print(
-                    f"  [{current:3d}/{total:3d}] ({percent:5.1f}%) {filename}"
+                    f"Downloading [cyan]{volume_id}/{remote_path}[/cyan] to [green]{local_path}[/green]"
                 )
+                s3_client.download_file(volume_id, remote_path, local_path)
+                console.print("[green]✓[/green] File download completed successfully!")
+            except Exception as e:
+                console.print(f"[red]Error downloading file: {e}[/red]")
+                console.print("[yellow]Tip: Use option 1 (Browse & Select) if you need to explore the file structure[/yellow]")
 
-            s3_client.download_directory(
-                volume_id, remote_dir, local_dir, progress_callback=progress_callback
+        elif choice == "3":
+            # Direct directory download - user knows the path
+            remote_dir = Prompt.ask(
+                "Enter the exact directory path to download (leave empty for root)", default=""
             )
-            console.print("[green]✓[/green] Directory download completed successfully!")
+            
+            # Ask if user wants a zip file
+            download_as_zip = Confirm.ask(
+                "Download as a zip file? (Recommended for cloud storage)", default=True
+            )
+            
+            if download_as_zip:
+                # Download as zip
+                zip_name = Prompt.ask(
+                    "Zip filename", 
+                    default=f"{Path(remote_dir).name or 'volume'}_download.zip"
+                )
+                
+                try:
+                    console.print(
+                        f"Downloading directory [cyan]{volume_id}/{remote_dir}[/cyan] as [green]{zip_name}[/green]"
+                    )
+                    
+                    # Create temporary directory for downloads
+                    with tempfile.TemporaryDirectory() as temp_dir:
+                        console.print("[dim]Downloading files to temporary directory...[/dim]")
+                        
+                        def progress_callback(current, total, filename):
+                            percent = (current / total) * 100
+                            console.print(
+                                f"  [{current:3d}/{total:3d}] ({percent:5.1f}%) {filename}"
+                            )
+                        
+                        # Download to temp directory
+                        s3_client.download_directory(
+                            volume_id, remote_dir, temp_dir, progress_callback=progress_callback
+                        )
+                        
+                        # Create zip file
+                        console.print(f"[dim]Creating zip file: {zip_name}...[/dim]")
+                        with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zf:
+                            temp_path = Path(temp_dir)
+                            for file_path in temp_path.rglob('*'):
+                                if file_path.is_file():
+                                    arc_name = file_path.relative_to(temp_path)
+                                    zf.write(file_path, arc_name)
+                        
+                        # Get zip file size
+                        zip_size = Path(zip_name).stat().st_size
+                        if zip_size < 1024 * 1024:
+                            size_str = f"{zip_size / 1024:.1f} KB"
+                        elif zip_size < 1024 * 1024 * 1024:
+                            size_str = f"{zip_size / (1024 * 1024):.1f} MB"
+                        else:
+                            size_str = f"{zip_size / (1024 * 1024 * 1024):.1f} GB"
+                        
+                        console.print(f"[green]✓[/green] Directory downloaded and zipped successfully!")
+                        console.print(f"    Zip file: [cyan]{zip_name}[/cyan] ({size_str})")
+                
+                except Exception as e:
+                    console.print(f"[red]Error downloading directory: {e}[/red]")
+                    console.print("[yellow]Tip: Use option 1 (Browse & Select) if you need to explore the file structure[/yellow]")
+            
+            else:
+                # Download as individual files
+                local_dir = Prompt.ask("Local directory to save files", default="./downloads")
+                
+                try:
+                    console.print(
+                        f"Downloading directory [cyan]{volume_id}/{remote_dir}[/cyan] to [green]{local_dir}[/green]"
+                    )
 
+                    def progress_callback(current, total, filename):
+                        percent = (current / total) * 100
+                        console.print(
+                            f"  [{current:3d}/{total:3d}] ({percent:5.1f}%) {filename}"
+                        )
+
+                    s3_client.download_directory(
+                        volume_id, remote_dir, local_dir, progress_callback=progress_callback
+                    )
+                    console.print("[green]✓[/green] Directory download completed successfully!")
+                except Exception as e:
+                    console.print(f"[red]Error downloading directory: {e}[/red]")
+                    console.print("[yellow]Tip: Use option 1 (Browse & Select) if you need to explore the file structure[/yellow]")
+
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+
+
+def _browse_and_download(s3_client, volume_id, session_ctx):
+    """Browse files with navigation mode and switch to select mode for downloads."""
+    try:
+        current_path = ""
+        selected_items = []  # Can contain both files and directories
+        mode = "navigation"  # Start in navigation mode
+        
+        while True:
+            console.clear()
+            console.print(f"\n[bold]📂 File Browser - Volume: {volume_id}[/bold]")
+            console.print(f"[dim]Path: /{current_path}[/dim]")
+            
+            # Show current mode
+            if mode == "navigation":
+                console.print("[blue]Mode: NAVIGATION[/blue] (Press 's' to enter SELECT mode)")
+            else:
+                console.print("[green]Mode: SELECT[/green] (Press 'n' to return to NAVIGATION mode)")
+                if selected_items:
+                    console.print(f"[yellow]Selected: {len(selected_items)} item(s)[/yellow]")
+            
+            console.print()  # Add spacing
+            
+            # List files in current directory
+            try:
+                files = s3_client.list_files(volume_id, current_path)
+            except Exception as e:
+                console.print(f"[red]Error listing files: {e}[/red]")
+                break
+            
+            # Process and organize items
+            directories = {}
+            file_list = []
+            all_items = []  # Combined list for unified display
+            
+            for file_info in files:
+                key = file_info["key"]
+                if current_path:
+                    if not key.startswith(current_path):
+                        continue
+                    relative_key = key[len(current_path):].lstrip("/")
+                else:
+                    relative_key = key
+                
+                if "/" in relative_key:
+                    # This is in a subdirectory
+                    dir_name = relative_key.split("/")[0]
+                    if dir_name not in directories:
+                        directories[dir_name] = {
+                            'name': dir_name,
+                            'type': 'directory',
+                            'path': f"{current_path}/{dir_name}".strip("/")
+                        }
+                else:
+                    # This is a file in current directory
+                    file_list.append(file_info)
+            
+            # Combine directories and files into a single list
+            for dir_name in sorted(directories.keys()):
+                all_items.append(directories[dir_name])
+            
+            for file_info in file_list:
+                all_items.append({
+                    'type': 'file',
+                    'info': file_info
+                })
+            
+            if not all_items:
+                console.print("[yellow]📭 This directory is empty.[/yellow]")
+            else:
+                # Create unified table
+                table = Table(title="Contents")
+                table.add_column("#", style="dim", width=4)
+                table.add_column("Type", width=6)
+                if mode == "select":
+                    table.add_column("✓", width=3)
+                table.add_column("Name", style="cyan")
+                table.add_column("Size", justify="right")
+                table.add_column("Modified", style="dim")
+                
+                for i, item in enumerate(all_items, 1):
+                    row = [str(i)]
+                    
+                    if item['type'] == 'directory':
+                        row.append("📁")
+                        if mode == "select":
+                            is_selected = any(
+                                s.get('type') == 'directory' and s.get('path') == item['path'] 
+                                for s in selected_items
+                            )
+                            row.append("✓" if is_selected else "")
+                        row.extend([
+                            f"{item['name']}/",
+                            "[dim]--[/dim]",
+                            "[dim]--[/dim]"
+                        ])
+                    else:
+                        file_info = item['info']
+                        key = file_info["key"]
+                        if current_path:
+                            display_name = key[len(current_path):].lstrip("/")
+                        else:
+                            display_name = key
+                        
+                        size = file_info["size"]
+                        if size < 1024:
+                            size_str = f"{size} B"
+                        elif size < 1024 * 1024:
+                            size_str = f"{size / 1024:.1f} KB"
+                        elif size < 1024 * 1024 * 1024:
+                            size_str = f"{size / (1024 * 1024):.1f} MB"
+                        else:
+                            size_str = f"{size / (1024 * 1024 * 1024):.1f} GB"
+                        
+                        row.append("📄")
+                        if mode == "select":
+                            is_selected = any(
+                                s.get('type') == 'file' and s.get('info', {}).get('key') == key 
+                                for s in selected_items
+                            )
+                            row.append("✓" if is_selected else "")
+                        row.extend([
+                            display_name,
+                            size_str,
+                            file_info["last_modified"].strftime("%Y-%m-%d %H:%M")
+                        ])
+                    
+                    table.add_row(*row)
+                
+                console.print(table)
+            
+            # Show actions based on mode
+            console.print("\n[bold]Commands:[/bold]")
+            if mode == "navigation":
+                console.print("  [cyan]#[/cyan]     - Enter directory (e.g., '1' to enter directory 1)")
+                console.print("  [cyan]d #[/cyan]   - Quick download (e.g., 'd 3' or 'd 1 3 5' for multiple)")
+                console.print("  [cyan]s[/cyan]     - Switch to SELECT mode for batch operations")
+                console.print("  [cyan]u[/cyan]     - Go up one level")
+                console.print("  [cyan]q[/cyan]     - Quit")
+            else:  # select mode
+                console.print("  [cyan]n[/cyan]     - Return to NAVIGATION mode")
+                console.print("  [cyan]a #[/cyan]   - Add item to selection (e.g., 'a 1')")
+                console.print("  [cyan]r #[/cyan]   - Remove item from selection (e.g., 'r 1')")
+                console.print("  [cyan]aa[/cyan]    - Add all items in current directory")
+                console.print("  [cyan]ra[/cyan]    - Clear all selections")
+                console.print("  [cyan]d[/cyan]     - Download selected items")
+                console.print("  [cyan]q[/cyan]     - Quit")
+            
+            # Get user input
+            action = Prompt.ask("Enter command").strip().lower()
+            
+            if action == "q":
+                console.print("[yellow]Cancelled.[/yellow]")
+                break
+            
+            elif action == "s" and mode == "navigation":
+                mode = "select"
+                console.print("[green]Switched to SELECT mode[/green]")
+            
+            elif action == "n" and mode == "select":
+                mode = "navigation"
+                console.print("[blue]Switched to NAVIGATION mode[/blue]")
+            
+            elif action.startswith("d ") and mode == "navigation":
+                # Direct download command - can download one or multiple items
+                try:
+                    # Parse the numbers (supports "d 1" or "d 1 3 5")
+                    parts = action[2:].strip().split()
+                    item_numbers = []
+                    for part in parts:
+                        try:
+                            num = int(part) - 1
+                            if 0 <= num < len(all_items):
+                                item_numbers.append(num)
+                            else:
+                                console.print(f"[red]Invalid item number: {part}[/red]")
+                        except ValueError:
+                            console.print(f"[red]Invalid number: {part}[/red]")
+                    
+                    if item_numbers:
+                        # Collect items to download
+                        items_to_download = [all_items[i] for i in item_numbers]
+                        
+                        # Count files and directories
+                        num_dirs = sum(1 for item in items_to_download if item['type'] == 'directory')
+                        num_files = sum(1 for item in items_to_download if item['type'] == 'file')
+                        
+                        # Show what will be downloaded
+                        console.print(f"\n[bold]Quick download:[/bold]")
+                        if num_dirs > 0:
+                            console.print(f"  📁 {num_dirs} director{'y' if num_dirs == 1 else 'ies'}")
+                        if num_files > 0:
+                            console.print(f"  📄 {num_files} file{'s' if num_files != 1 else ''}")
+                        
+                        # Quick confirm
+                        if Confirm.ask("Download as zip?", default=True):
+                            zip_name = Prompt.ask("Zip filename", default="quick_download.zip")
+                            
+                            # Download process (simplified from the select mode version)
+                            with tempfile.TemporaryDirectory() as temp_dir:
+                                console.print("[dim]Downloading...[/dim]")
+                                
+                                for item in items_to_download:
+                                    if item['type'] == 'directory':
+                                        # Download entire directory
+                                        dir_path = item['path']
+                                        dir_name = item['name']
+                                        
+                                        # Get all files in this directory
+                                        dir_files = s3_client.list_files(volume_id, dir_path)
+                                        for file_info in dir_files:
+                                            relative_path = file_info['key'][len(dir_path):].lstrip('/')
+                                            if relative_path:
+                                                local_file_path = Path(temp_dir) / dir_name / relative_path
+                                                local_file_path.parent.mkdir(parents=True, exist_ok=True)
+                                                s3_client.download_file(volume_id, file_info['key'], str(local_file_path))
+                                    else:
+                                        # Download individual file
+                                        file_info = item['info']
+                                        local_path = Path(temp_dir) / Path(file_info['key']).name
+                                        s3_client.download_file(volume_id, file_info['key'], str(local_path))
+                                
+                                # Create zip file
+                                with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zf:
+                                    temp_path = Path(temp_dir)
+                                    for file_path in temp_path.rglob('*'):
+                                        if file_path.is_file():
+                                            arc_name = file_path.relative_to(temp_path)
+                                            zf.write(file_path, arc_name)
+                                
+                                # Get zip file size
+                                zip_size = Path(zip_name).stat().st_size
+                                if zip_size < 1024 * 1024:
+                                    size_str = f"{zip_size / 1024:.1f} KB"
+                                elif zip_size < 1024 * 1024 * 1024:
+                                    size_str = f"{zip_size / (1024 * 1024):.1f} MB"
+                                else:
+                                    size_str = f"{zip_size / (1024 * 1024 * 1024):.1f} GB"
+                                
+                                console.print(f"[green]✓[/green] Downloaded to: [cyan]{zip_name}[/cyan] ({size_str})")
+                        else:
+                            console.print("[yellow]Download cancelled.[/yellow]")
+                
+                except Exception as e:
+                    console.print(f"[red]Error during download: {e}[/red]")
+            
+            elif action.isdigit() and mode == "navigation":
+                # Direct number entry for navigation
+                try:
+                    item_num = int(action) - 1
+                    if 0 <= item_num < len(all_items):
+                        item = all_items[item_num]
+                        if item['type'] == 'directory':
+                            current_path = item['path']
+                        else:
+                            console.print("[yellow]That's a file. Use 'd #' to download or 's' for selection mode.[/yellow]")
+                    else:
+                        console.print("[red]Invalid item number.[/red]")
+                except ValueError:
+                    console.print("[red]Invalid number.[/red]")
+            
+            elif action == "u" and mode == "navigation":
+                if current_path:
+                    current_path = "/".join(current_path.split("/")[:-1])
+                else:
+                    console.print("[yellow]Already at root directory.[/yellow]")
+            
+            elif action.startswith("a ") and mode == "select":
+                try:
+                    item_num = int(action[2:]) - 1
+                    if 0 <= item_num < len(all_items):
+                        item_to_add = all_items[item_num]
+                        
+                        # Check if already selected
+                        already_selected = False
+                        if item_to_add['type'] == 'directory':
+                            already_selected = any(
+                                s.get('type') == 'directory' and s.get('path') == item_to_add['path']
+                                for s in selected_items
+                            )
+                        else:
+                            key = item_to_add['info']['key']
+                            already_selected = any(
+                                s.get('type') == 'file' and s.get('info', {}).get('key') == key
+                                for s in selected_items
+                            )
+                        
+                        if not already_selected:
+                            selected_items.append(item_to_add)
+                            name = item_to_add['name'] if item_to_add['type'] == 'directory' else item_to_add['info']['key']
+                            console.print(f"[green]Added: {name}[/green]")
+                        else:
+                            console.print("[yellow]Item already selected.[/yellow]")
+                    else:
+                        console.print("[red]Invalid item number.[/red]")
+                except ValueError:
+                    console.print("[red]Invalid item number.[/red]")
+            
+            elif action.startswith("r ") and mode == "select":
+                try:
+                    item_num = int(action[2:]) - 1
+                    if 0 <= item_num < len(all_items):
+                        item_to_remove = all_items[item_num]
+                        
+                        # Remove from selected items
+                        if item_to_remove['type'] == 'directory':
+                            selected_items = [
+                                s for s in selected_items 
+                                if not (s.get('type') == 'directory' and s.get('path') == item_to_remove['path'])
+                            ]
+                            console.print(f"[yellow]Removed: {item_to_remove['name']}/[/yellow]")
+                        else:
+                            key = item_to_remove['info']['key']
+                            selected_items = [
+                                s for s in selected_items 
+                                if not (s.get('type') == 'file' and s.get('info', {}).get('key') == key)
+                            ]
+                            console.print(f"[yellow]Removed: {key}[/yellow]")
+                    else:
+                        console.print("[red]Invalid item number.[/red]")
+                except ValueError:
+                    console.print("[red]Invalid item number.[/red]")
+            
+            elif action == "aa" and mode == "select":
+                added_count = 0
+                for item in all_items:
+                    # Check if already selected
+                    already_selected = False
+                    if item['type'] == 'directory':
+                        already_selected = any(
+                            s.get('type') == 'directory' and s.get('path') == item['path']
+                            for s in selected_items
+                        )
+                    else:
+                        key = item['info']['key']
+                        already_selected = any(
+                            s.get('type') == 'file' and s.get('info', {}).get('key') == key
+                            for s in selected_items
+                        )
+                    
+                    if not already_selected:
+                        selected_items.append(item)
+                        added_count += 1
+                
+                console.print(f"[green]Added {added_count} items from current directory.[/green]")
+            
+            elif action == "ra" and mode == "select":
+                selected_items = []
+                console.print("[yellow]Cleared all selections.[/yellow]")
+            
+            elif action == "d" and mode == "select":
+                if not selected_items:
+                    console.print("[yellow]No items selected for download.[/yellow]")
+                    continue
+                
+                # Count files and directories
+                num_dirs = sum(1 for item in selected_items if item['type'] == 'directory')
+                num_files = sum(1 for item in selected_items if item['type'] == 'file')
+                
+                # Confirm download
+                console.print(f"\n[bold]Ready to download:[/bold]")
+                if num_dirs > 0:
+                    console.print(f"  📁 {num_dirs} director{'y' if num_dirs == 1 else 'ies'}")
+                if num_files > 0:
+                    console.print(f"  📄 {num_files} file{'s' if num_files != 1 else ''}")
+                
+                # Show first few items
+                console.print("\n[dim]Items to download:[/dim]")
+                for i, item in enumerate(selected_items[:5]):
+                    if item['type'] == 'directory':
+                        console.print(f"  • 📁 {item['name']}/")
+                    else:
+                        console.print(f"  • 📄 {item['info']['key']}")
+                if len(selected_items) > 5:
+                    console.print(f"  ... and {len(selected_items) - 5} more")
+                
+                if Confirm.ask("\nProceed with download?", default=True):
+                    # Always download as zip for simplicity and efficiency with cloud storage
+                    download_as_zip = Confirm.ask(
+                        "Download as a zip file? (Recommended)", default=True
+                    )
+                    
+                    if download_as_zip:
+                        # Download as zip
+                        zip_name = Prompt.ask("Zip filename", default="download.zip")
+                        
+                        # Create temporary directory for downloads
+                        with tempfile.TemporaryDirectory() as temp_dir:
+                            with Progress(
+                                SpinnerColumn(),
+                                TextColumn("[progress.description]{task.description}"),
+                                console=console,
+                            ) as progress:
+                                total_items = len(selected_items)
+                                item_count = 0
+                                
+                                # Process each selected item
+                                for item in selected_items:
+                                    if item['type'] == 'directory':
+                                        # Download entire directory
+                                        dir_path = item['path']
+                                        dir_name = item['name']
+                                        task = progress.add_task(
+                                            f"[{item_count+1}/{total_items}] Downloading directory: {dir_name}/...",
+                                            total=None
+                                        )
+                                        
+                                        # Get all files in this directory
+                                        dir_files = s3_client.list_files(volume_id, dir_path)
+                                        for file_info in dir_files:
+                                            # Create subdirectory structure
+                                            relative_path = file_info['key'][len(dir_path):].lstrip('/')
+                                            if relative_path:  # Skip if it's the directory itself
+                                                local_file_path = Path(temp_dir) / dir_name / relative_path
+                                                local_file_path.parent.mkdir(parents=True, exist_ok=True)
+                                                s3_client.download_file(volume_id, file_info['key'], str(local_file_path))
+                                        
+                                        progress.update(task, completed=1)
+                                        item_count += 1
+                                    else:
+                                        # Download individual file
+                                        file_info = item['info']
+                                        task = progress.add_task(
+                                            f"[{item_count+1}/{total_items}] Downloading: {Path(file_info['key']).name}...",
+                                            total=None
+                                        )
+                                        local_path = Path(temp_dir) / Path(file_info['key']).name
+                                        s3_client.download_file(volume_id, file_info['key'], str(local_path))
+                                        progress.update(task, completed=1)
+                                        item_count += 1
+                            
+                            # Create zip file
+                            console.print(f"[dim]Creating zip file: {zip_name}...[/dim]")
+                            with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zf:
+                                temp_path = Path(temp_dir)
+                                for file_path in temp_path.rglob('*'):
+                                    if file_path.is_file():
+                                        arc_name = file_path.relative_to(temp_path)
+                                        zf.write(file_path, arc_name)
+                            
+                            # Get zip file size
+                            zip_size = Path(zip_name).stat().st_size
+                            if zip_size < 1024 * 1024:
+                                size_str = f"{zip_size / 1024:.1f} KB"
+                            elif zip_size < 1024 * 1024 * 1024:
+                                size_str = f"{zip_size / (1024 * 1024):.1f} MB"
+                            else:
+                                size_str = f"{zip_size / (1024 * 1024 * 1024):.1f} GB"
+                            
+                            console.print(f"[green]✓[/green] Downloaded successfully!")
+                            console.print(f"    Zip file: [cyan]{zip_name}[/cyan] ({size_str})")
+                    else:
+                        # Download as individual files (not recommended for cloud storage)
+                        download_dir = Prompt.ask("Local directory to save files", default="./downloads")
+                        Path(download_dir).mkdir(parents=True, exist_ok=True)
+                        
+                        console.print("[yellow]Note: Downloading individual files from cloud storage...[/yellow]")
+                        console.print("[yellow]Consider using zip download for better efficiency.[/yellow]")
+                        
+                        with Progress(
+                            SpinnerColumn(),
+                            TextColumn("[progress.description]{task.description}"),
+                            console=console,
+                        ) as progress:
+                            total_items = len(selected_items)
+                            item_count = 0
+                            
+                            for item in selected_items:
+                                if item['type'] == 'directory':
+                                    # Download directory contents
+                                    dir_path = item['path']
+                                    dir_name = item['name']
+                                    task = progress.add_task(
+                                        f"[{item_count+1}/{total_items}] Downloading directory: {dir_name}/...",
+                                        total=None
+                                    )
+                                    
+                                    # Create local directory
+                                    local_dir = Path(download_dir) / dir_name
+                                    local_dir.mkdir(parents=True, exist_ok=True)
+                                    
+                                    # Get all files in this directory
+                                    dir_files = s3_client.list_files(volume_id, dir_path)
+                                    for file_info in dir_files:
+                                        relative_path = file_info['key'][len(dir_path):].lstrip('/')
+                                        if relative_path:
+                                            local_file_path = local_dir / relative_path
+                                            local_file_path.parent.mkdir(parents=True, exist_ok=True)
+                                            s3_client.download_file(volume_id, file_info['key'], str(local_file_path))
+                                    
+                                    progress.update(task, completed=1)
+                                    item_count += 1
+                                else:
+                                    # Download individual file
+                                    file_info = item['info']
+                                    task = progress.add_task(
+                                        f"[{item_count+1}/{total_items}] Downloading: {Path(file_info['key']).name}...",
+                                        total=None
+                                    )
+                                    local_path = Path(download_dir) / Path(file_info['key']).name
+                                    s3_client.download_file(volume_id, file_info['key'], str(local_path))
+                                    progress.update(task, completed=1)
+                                    item_count += 1
+                        
+                        console.print(f"[green]✓[/green] Downloaded to {download_dir}")
+                    
+                    break
+                else:
+                    console.print("[yellow]Download cancelled.[/yellow]")
+            
+            else:
+                console.print("[red]Invalid action. Please try again.[/red]")
+    
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
 
