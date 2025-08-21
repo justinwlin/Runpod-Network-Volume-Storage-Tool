@@ -37,6 +37,7 @@ import sys
 import time
 import tempfile
 import hashlib
+import threading
 from pathlib import Path
 from datetime import datetime
 
@@ -175,6 +176,40 @@ class TestLargeFileUpload:
         print(f"Uploading {file_size / (1024**3):.2f} GB file...")
         print(f"Chunk size: {chunk_size / (1024**2):.0f} MB")
         
+        # Real progress callback
+        last_update = [time.time()]  # Use list to allow modification in nested function
+        
+        def progress_callback(bytes_uploaded, total_bytes, speed_mbps):
+            """Handle progress updates from the upload."""
+            now = time.time()
+            # Only update display every 0.5 seconds to avoid flickering
+            if now - last_update[0] < 0.5 and bytes_uploaded < total_bytes:
+                return
+            last_update[0] = now
+            
+            percent = (bytes_uploaded / total_bytes) * 100
+            uploaded_gb = bytes_uploaded / (1024**3)
+            total_gb = total_bytes / (1024**3)
+            
+            # Calculate ETA
+            if speed_mbps > 0:
+                remaining_bytes = total_bytes - bytes_uploaded
+                remaining_seconds = (remaining_bytes / (1024**2)) / speed_mbps
+                eta = f" - ETA: {int(remaining_seconds//60)}m {int(remaining_seconds%60)}s"
+            else:
+                eta = ""
+            
+            # Display progress bar
+            bar_width = 40
+            filled = int(bar_width * percent / 100)
+            bar = '█' * filled + '░' * (bar_width - filled)
+            
+            print(f"\r  [{bar}] {percent:.1f}% - {uploaded_gb:.2f}/{total_gb:.2f} GB - {speed_mbps:.1f} MB/s{eta}", 
+                  end="", flush=True)
+            
+            if bytes_uploaded >= total_bytes:
+                print()  # New line when complete
+        
         start_time = time.time()
         
         try:
@@ -182,7 +217,8 @@ class TestLargeFileUpload:
                 file_path,
                 self.test_volume_id,
                 remote_path,
-                chunk_size=chunk_size
+                chunk_size=chunk_size,
+                progress_callback=progress_callback
             )
             
             elapsed = time.time() - start_time
@@ -210,6 +246,27 @@ class TestLargeFileUpload:
             self.test_files.append(download_path)
         
         print(f"Downloading from {remote_path}...")
+        
+        # Progress indicator for download
+        stop_progress = threading.Event()
+        
+        def show_download_progress():
+            """Show a simple progress spinner during download."""
+            spinner = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+            i = 0
+            start = time.time()
+            while not stop_progress.is_set():
+                elapsed = time.time() - start
+                print(f"\r  {spinner[i % len(spinner)]} Downloading... {elapsed:.1f}s elapsed", end="", flush=True)
+                i += 1
+                time.sleep(0.1)
+            print("\r" + " " * 80 + "\r", end="")  # Clear the line
+        
+        # Start progress thread
+        progress_thread = threading.Thread(target=show_download_progress)
+        progress_thread.daemon = True
+        progress_thread.start()
+        
         start_time = time.time()
         
         try:
@@ -218,6 +275,9 @@ class TestLargeFileUpload:
                 remote_path,
                 download_path
             )
+            
+            stop_progress.set()
+            progress_thread.join(timeout=1)
             
             elapsed = time.time() - start_time
             file_size = os.path.getsize(download_path)
@@ -283,11 +343,20 @@ class TestLargeFileUpload:
             
             try:
                 start_time = time.time()
+                
+                # Simple progress for chunk test
+                def test_progress(bytes_up, total, speed):
+                    percent = (bytes_up / total) * 100
+                    print(f"\r    Testing: {percent:.0f}%", end="", flush=True)
+                    if bytes_up >= total:
+                        print("\r    ", end="")  # Clear line
+                
                 self.api.upload_file(
                     test_file,
                     self.test_volume_id,
                     remote_path,
-                    chunk_size=chunk_size
+                    chunk_size=chunk_size,
+                    progress_callback=test_progress
                 )
                 elapsed = time.time() - start_time
                 

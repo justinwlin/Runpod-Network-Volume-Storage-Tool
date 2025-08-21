@@ -131,6 +131,7 @@ class RunpodStorageAPI:
         volume_id: str,
         remote_path: Optional[str] = None,
         chunk_size: Optional[int] = None,
+        progress_callback: Optional[callable] = None,
     ) -> bool:
         """Upload a file to a volume with automatic chunk size optimization.
 
@@ -149,6 +150,8 @@ class RunpodStorageAPI:
                 You can override with custom values if needed.
                 Larger chunks = fewer requests but more memory usage.
                 Smaller chunks = more reliable on unstable connections.
+            progress_callback: Optional callback for progress updates.
+                Called with (bytes_uploaded, total_bytes, speed_mbps)
 
         Returns:
             True if successful
@@ -186,7 +189,8 @@ class RunpodStorageAPI:
         s3_client = self._get_s3_client(datacenter_id)
 
         return s3_client.upload_file(
-            str(local_path), volume_id, remote_path, chunk_size
+            str(local_path), volume_id, remote_path, chunk_size, 
+            progress_callback=progress_callback
         )
 
     def download_file(

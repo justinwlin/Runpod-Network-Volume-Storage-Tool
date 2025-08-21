@@ -133,6 +133,7 @@ class RunpodS3Client:
         remote_path: str,
         chunk_size: Optional[int] = None,
         enable_resume: bool = True,
+        progress_callback: Optional[callable] = None,
     ) -> bool:
         """Upload a file to network volume with automatic chunk size optimization.
 
@@ -142,6 +143,8 @@ class RunpodS3Client:
             remote_path: Remote file path in volume
             chunk_size: Size of chunks for multipart upload (auto-detected if None)
             enable_resume: Enable resume capability for interrupted uploads
+            progress_callback: Optional callback for progress updates.
+                Called with (bytes_uploaded, total_bytes, speed_mbps)
 
         Returns:
             True if successful
@@ -174,10 +177,14 @@ class RunpodS3Client:
 
         # Use simple upload for small files, multipart for large files
         if file_size < chunk_size:
-            return self._simple_upload(str(local_path), volume_id, remote_path)
+            # For simple upload, call progress callback once at completion
+            result = self._simple_upload(str(local_path), volume_id, remote_path)
+            if result and progress_callback:
+                progress_callback(file_size, file_size, 0)
+            return result
         else:
             return self._multipart_upload(
-                str(local_path), volume_id, remote_path, chunk_size, enable_resume
+                str(local_path), volume_id, remote_path, chunk_size, enable_resume, progress_callback
             )
 
     def upload_directory(
@@ -466,7 +473,8 @@ class RunpodS3Client:
             raise
 
     def _multipart_upload(
-        self, local_path: str, volume_id: str, remote_path: str, chunk_size: int, enable_resume: bool = True
+        self, local_path: str, volume_id: str, remote_path: str, chunk_size: int, 
+        enable_resume: bool = True, progress_callback: Optional[callable] = None
     ) -> bool:
         """Upload a large file using multipart upload with the robust implementation."""
         try:
@@ -481,6 +489,7 @@ class RunpodS3Client:
                 part_size=chunk_size,
                 max_retries=self.max_retries,
                 enable_resume=enable_resume,
+                progress_callback=progress_callback,
             )
             uploader.upload()
             return True
@@ -505,6 +514,7 @@ class LargeMultipartUploader:
         part_size: int = 50 * 1024 * 1024,
         max_retries: int = 5,
         enable_resume: bool = True,
+        progress_callback: Optional[callable] = None,
     ) -> None:
         self.file_path = file_path
         self.bucket = bucket
@@ -516,9 +526,11 @@ class LargeMultipartUploader:
         self.part_size = part_size
         self.max_retries = max_retries
         self.enable_resume = enable_resume
+        self.progress_callback = progress_callback
 
         self.progress_lock = Lock()
         self.parts_completed = 0
+        self.upload_start_time = None
 
         self.session = boto3.session.Session(
             aws_access_key_id=self.access_key,
@@ -827,6 +839,7 @@ class LargeMultipartUploader:
         bytes_to_read: int,
         total_parts: int,
         start_time: float,
+        file_size: int,
     ) -> dict:
         """Upload a single part with exponential-backoff retries."""
         if self.upload_id is None:
@@ -851,7 +864,23 @@ class LargeMultipartUploader:
                 with self.progress_lock:
                     self.parts_completed += 1
                     progress = 100.0 * self.parts_completed / total_parts
+                    
+                # Calculate progress metrics
                 elapsed = time.time() - start_time
+                bytes_uploaded = self.parts_completed * self.part_size
+                # Handle last part which might be smaller
+                if self.parts_completed == total_parts:
+                    bytes_uploaded = file_size
+                total_bytes = file_size
+                speed_mbps = (bytes_uploaded / (1024**2)) / elapsed if elapsed > 0 else 0
+                
+                # Call progress callback if provided
+                if self.progress_callback:
+                    try:
+                        self.progress_callback(bytes_uploaded, total_bytes, speed_mbps)
+                    except Exception as e:
+                        logger.warning(f"Progress callback error: {e}")
+                
                 progress_fraction = part_number / total_parts
                 if progress_fraction > 0:
                     remaining = max(0, elapsed * (1 / progress_fraction - 1))
@@ -946,6 +975,7 @@ class LargeMultipartUploader:
                             bytes_to_read=chunk_size,
                             total_parts=total_parts,
                             start_time=start_time,
+                            file_size=file_size,
                         )
                     ] = part_num
 
