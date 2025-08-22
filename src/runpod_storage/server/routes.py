@@ -6,11 +6,10 @@ Implements all REST endpoints with comprehensive validation and error handling.
 
 import os
 import tempfile
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status, Header
 from fastapi.responses import FileResponse
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from ..core.api import RunpodStorageAPI
 from ..core.exceptions import (
@@ -34,8 +33,6 @@ from ..core.models import (
 )
 
 # Security
-security = HTTPBearer(auto_error=False)
-
 router = APIRouter(
     prefix="",
     tags=["Storage"],
@@ -47,37 +44,14 @@ router = APIRouter(
 )
 
 
-async def get_api_key(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    api_key_header: str = None,
-    api_key_query: str = None,
+async def get_runpod_api_key(
+    runpod_api_key: str = Header(..., description="Your Runpod API key (e.g., rpa_XXX...)"),
 ) -> str:
-    """Extract API key from various sources."""
-
-    # Try Bearer token first
-    if credentials and credentials.credentials:
-        return credentials.credentials
-
-    # Try X-API-Key header
-    if api_key_header:
-        return api_key_header
-
-    # Try query parameter
-    if api_key_query:
-        return api_key_query
-
-    # Try environment variable (for development)
-    env_key = os.getenv("RUNPOD_API_KEY")
-    if env_key:
-        return env_key
-
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="API key required. Use Authorization header, X-API-Key header, or api_key query parameter.",
-    )
+    """Simple authentication - just pass your Runpod API key."""
+    return runpod_api_key
 
 
-async def get_storage_api(api_key: str = Depends(get_api_key)) -> RunpodStorageAPI:
+async def get_storage_api(api_key: str = Depends(get_runpod_api_key)) -> RunpodStorageAPI:
     """Get authenticated storage API instance for volume operations only."""
     try:
         return RunpodStorageAPI(api_key=api_key, auto_setup_s3=False)
@@ -211,25 +185,29 @@ async def delete_volume(
     "/volumes/{volume_id}/files/list",
     response_model=ListFilesResponse,
     summary="List files in volume",
-    description="List all files in a network volume, optionally filtered by prefix. Requires S3 credentials in request body.",
+    description="List all files in a network volume, optionally filtered by prefix.",
 )
 async def list_files(
-    volume_id: str, request: ListFilesRequest, api_key: str = Depends(get_api_key)
+    volume_id: str,
+    prefix: Optional[str] = None,
+    api_key: str = Depends(get_runpod_api_key),
+    s3_access_key: str = Header(..., description="S3 access key (e.g., user_XXX...)"),
+    s3_secret_key: str = Header(..., description="S3 secret key (e.g., rps_XXX...)"),
 ) -> ListFilesResponse:
     """List files in a volume."""
     try:
         # Create API instance with provided S3 credentials
         api = RunpodStorageAPI(
             api_key=api_key,
-            s3_access_key=request.s3_credentials.s3_access_key,
-            s3_secret_key=request.s3_credentials.s3_secret_key,
+            s3_access_key=s3_access_key,
+            s3_secret_key=s3_secret_key,
         )
 
-        files = api.list_files(volume_id, request.prefix or "")
+        files = api.list_files(volume_id, prefix or "")
         return ListFilesResponse(
             files=files,
             total_count=len(files),
-            prefix=request.prefix if request.prefix else None,
+            prefix=prefix if prefix else None,
         )
     except VolumeNotFoundError:
         raise HTTPException(status_code=404, detail=f"Volume {volume_id} not found")
@@ -243,18 +221,16 @@ async def list_files(
     "/volumes/{volume_id}/files",
     response_model=UploadResponse,
     summary="Upload file",
-    description="Upload a file to a network volume. Supports large files via multipart upload. Requires S3 credentials in form data.",
+    description="Upload a file to a network volume. Supports large files via multipart upload.",
 )
 async def upload_file(
     volume_id: str,
     file: UploadFile = File(..., description="File to upload"),
     remote_path: str = Form(None, description="Remote path for the file"),
-    chunk_size: int = Form(
-        50 * 1024 * 1024, description="Chunk size for multipart upload"
-    ),
-    s3_access_key: str = Form(..., description="S3 access key"),
-    s3_secret_key: str = Form(..., description="S3 secret key"),
-    api_key: str = Depends(get_api_key),
+    chunk_size: int = Form(None, description="Chunk size for multipart upload (auto-detected if not specified)"),
+    api_key: str = Depends(get_runpod_api_key),
+    s3_access_key: str = Header(..., description="S3 access key (e.g., user_XXX...)"),
+    s3_secret_key: str = Header(..., description="S3 secret key (e.g., rps_XXX...)"),
 ) -> UploadResponse:
     """Upload a file to a volume."""
 
@@ -310,10 +286,14 @@ async def upload_file(
     "/volumes/{volume_id}/files/download",
     response_class=FileResponse,
     summary="Download file",
-    description="Download a file from a network volume. Requires S3 credentials in request body.",
+    description="Download a file from a network volume.",
 )
 async def download_file(
-    volume_id: str, request: DownloadFileRequest, api_key: str = Depends(get_api_key)
+    volume_id: str,
+    remote_path: str,
+    api_key: str = Depends(get_runpod_api_key),
+    s3_access_key: str = Header(..., description="S3 access key (e.g., user_XXX...)"),
+    s3_secret_key: str = Header(..., description="S3 secret key (e.g., rps_XXX...)"),
 ) -> FileResponse:
     """Download a file from a volume."""
 
@@ -325,14 +305,14 @@ async def download_file(
         # Create API instance with provided S3 credentials
         api = RunpodStorageAPI(
             api_key=api_key,
-            s3_access_key=request.s3_credentials.s3_access_key,
-            s3_secret_key=request.s3_credentials.s3_secret_key,
+            s3_access_key=s3_access_key,
+            s3_secret_key=s3_secret_key,
         )
 
-        success = api.download_file(volume_id, request.remote_path, tmp_file_path)
+        success = api.download_file(volume_id, remote_path, tmp_file_path)
 
         if success:
-            filename = os.path.basename(request.remote_path)
+            filename = os.path.basename(remote_path)
             return FileResponse(
                 path=tmp_file_path,
                 filename=filename,
@@ -355,28 +335,32 @@ async def download_file(
     "/volumes/{volume_id}/files/delete",
     response_model=DeleteResponse,
     summary="Delete file",
-    description="Delete a file from a network volume. Requires S3 credentials in request body.",
+    description="Delete a file from a network volume.",
 )
 async def delete_file(
-    volume_id: str, request: DeleteFileRequest, api_key: str = Depends(get_api_key)
+    volume_id: str,
+    remote_path: str,
+    api_key: str = Depends(get_runpod_api_key),
+    s3_access_key: str = Header(..., description="S3 access key (e.g., user_XXX...)"),
+    s3_secret_key: str = Header(..., description="S3 secret key (e.g., rps_XXX...)"),
 ) -> DeleteResponse:
     """Delete a file from a volume."""
     try:
         # Create API instance with provided S3 credentials
         api = RunpodStorageAPI(
             api_key=api_key,
-            s3_access_key=request.s3_credentials.s3_access_key,
-            s3_secret_key=request.s3_credentials.s3_secret_key,
+            s3_access_key=s3_access_key,
+            s3_secret_key=s3_secret_key,
         )
 
-        success = api.delete_file(volume_id, request.remote_path)
+        success = api.delete_file(volume_id, remote_path)
         if success:
             return DeleteResponse(
-                success=True, message=f"File {request.remote_path} deleted successfully"
+                success=True, message=f"File {remote_path} deleted successfully"
             )
         else:
             raise HTTPException(
-                status_code=404, detail=f"File {request.remote_path} not found"
+                status_code=404, detail=f"File {remote_path} not found"
             )
     except VolumeNotFoundError:
         raise HTTPException(status_code=404, detail=f"Volume {volume_id} not found")

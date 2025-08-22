@@ -52,22 +52,8 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
-        contact={
-            "name": "Runpod Storage Team",
-            "email": "support@runpod.io",
-            "url": "https://github.com/runpod/runpod-storage",
-        },
-        license_info={
-            "name": "MIT",
-            "url": "https://opensource.org/licenses/MIT",
-        },
-        servers=[
-            {
-                "url": "https://storage-api.runpod.io",
-                "description": "Production server",
-            },
-            {"url": "http://localhost:8000", "description": "Development server"},
-        ],
+        # Let FastAPI auto-detect the server URL from the request
+        # This will use whatever host:port the user is accessing the docs from
     )
 
     # CORS middleware
