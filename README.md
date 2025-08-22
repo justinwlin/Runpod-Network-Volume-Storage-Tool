@@ -262,15 +262,27 @@ import os
 api = RunpodStorageAPI()
 volume_id = "your-volume-id"
 
-# Upload a single file
+# Upload a single file (auto-detects optimal chunk size)
 api.upload_file("data.csv", volume_id, "datasets/data.csv")
 
-# Upload with custom chunk size for large files
+# Upload with progress tracking
+def upload_progress(bytes_uploaded, total_bytes, speed_mbps):
+    percent = (bytes_uploaded / total_bytes) * 100
+    print(f"Upload: {percent:.1f}% - {speed_mbps:.1f} MB/s")
+
 api.upload_file(
     "large_model.bin",
     volume_id,
     "models/large_model.bin",
-    chunk_size=100 * 1024 * 1024  # 100MB chunks
+    progress_callback=upload_progress
+)
+
+# Upload with custom chunk size (optional)
+api.upload_file(
+    "huge_dataset.tar",
+    volume_id,
+    "datasets/huge_dataset.tar",
+    chunk_size=200 * 1024 * 1024  # 200MB chunks for very large files
 )
 
 # Upload entire directory with progress tracking
@@ -461,84 +473,68 @@ from pathlib import Path
 api = RunpodStorageAPI()
 volume_id = "your-volume-id"
 
-# Basic large file upload with optimal chunk size
+# Simple large file upload - chunk size auto-detected!
 def upload_large_file(local_path, volume_id, remote_path):
-    """Upload large file with progress tracking"""
+    """Upload large file with automatic optimization"""
     file_size = os.path.getsize(local_path)
     file_size_gb = file_size / (1024**3)
     
     print(f"Uploading {file_size_gb:.2f} GB file: {local_path}")
     
-    # Choose chunk size based on file size
-    if file_size_gb < 1:
-        chunk_size = 5 * 1024 * 1024      # 5MB chunks for < 1GB
-    elif file_size_gb < 10:
-        chunk_size = 50 * 1024 * 1024     # 50MB chunks for 1-10GB
-    elif file_size_gb < 50:
-        chunk_size = 100 * 1024 * 1024    # 100MB chunks for 10-50GB
-    else:
-        chunk_size = 200 * 1024 * 1024    # 200MB chunks for > 50GB
+    # NEW: Auto-detects optimal chunk size based on file size
+    # No need to manually specify chunk_size anymore!
+    api.upload_file(
+        local_path,
+        volume_id,
+        remote_path
+        # chunk_size is automatically optimized:
+        # < 1 GB: 10 MB chunks
+        # 1-10 GB: 50 MB chunks  
+        # 10-50 GB: 100 MB chunks
+        # > 50 GB: 200 MB chunks
+    )
     
-    start_time = time.time()
+    print(f"✓ Upload completed!")
+
+# Advanced upload with real-time progress tracking
+def upload_with_progress(local_path, volume_id, remote_path):
+    """Upload large file with detailed progress tracking"""
+    from runpod_storage import RunpodStorageAPI
     
-    # Upload with automatic multipart handling
+    api = RunpodStorageAPI()
+    
+    def progress_callback(bytes_uploaded, total_bytes, speed_mbps):
+        """Display upload progress with bar"""
+        percent = (bytes_uploaded / total_bytes) * 100
+        uploaded_gb = bytes_uploaded / (1024**3)
+        total_gb = total_bytes / (1024**3)
+        
+        # Calculate ETA
+        if speed_mbps > 0:
+            remaining_bytes = total_bytes - bytes_uploaded
+            remaining_seconds = (remaining_bytes / (1024**2)) / speed_mbps
+            eta_str = f" - ETA: {int(remaining_seconds//60)}m {int(remaining_seconds%60)}s"
+        else:
+            eta_str = ""
+        
+        # Create progress bar
+        bar_width = 40
+        filled = int(bar_width * percent / 100)
+        bar = '█' * filled + '░' * (bar_width - filled)
+        
+        print(f"\r[{bar}] {percent:.1f}% - {uploaded_gb:.2f}/{total_gb:.2f} GB - {speed_mbps:.1f} MB/s{eta_str}", 
+              end="", flush=True)
+        
+        if bytes_uploaded >= total_bytes:
+            print("\n✓ Upload complete!")
+    
+    # Upload with automatic chunk size detection and progress
     api.upload_file(
         local_path,
         volume_id,
         remote_path,
-        chunk_size=chunk_size,
-        enable_resume=True  # Enable resume capability
+        progress_callback=progress_callback
     )
-    
-    elapsed = time.time() - start_time
-    speed_mbps = (file_size / (1024**2)) / elapsed
-    
-    print(f"✓ Upload completed in {elapsed:.1f}s ({speed_mbps:.1f} MB/s)")
-
-# Advanced upload with progress callback
-class UploadProgress:
-    def __init__(self, total_size):
-        self.total_size = total_size
-        self.uploaded = 0
-        self.start_time = time.time()
-    
-    def callback(self, bytes_uploaded):
-        """Progress callback for multipart uploads"""
-        self.uploaded += bytes_uploaded
-        percent = (self.uploaded / self.total_size) * 100
-        
-        elapsed = time.time() - self.start_time
-        speed = self.uploaded / elapsed / (1024**2)  # MB/s
-        eta = (self.total_size - self.uploaded) / (self.uploaded / elapsed)
-        
-        print(f"\rProgress: {percent:.1f}% - {speed:.1f} MB/s - ETA: {eta:.0f}s", end="")
-
-def upload_with_progress(local_path, volume_id, remote_path):
-    """Upload large file with detailed progress tracking"""
-    file_size = os.path.getsize(local_path)
-    progress = UploadProgress(file_size)
-    
-    # For S3Client with progress (if using boto3 directly)
-    from runpod_storage.core.s3_client import RunpodS3Client
-    
-    # Initialize S3 client
-    s3_client = RunpodS3Client(
-        access_key=os.getenv("RUNPOD_S3_ACCESS_KEY"),
-        secret_key=os.getenv("RUNPOD_S3_SECRET_KEY"),
-        region="EU-RO-1",
-        endpoint_url="https://s3api-eu-ro-1.runpod.io/"
-    )
-    
-    # Upload with progress callback
-    s3_client.upload_file_multipart(
-        local_path,
-        volume_id,
-        remote_path,
-        chunk_size=100 * 1024 * 1024,
-        progress_callback=progress.callback
-    )
-    
-    print("\n✓ Upload complete!")
 
 # Batch upload large files
 def upload_large_dataset(dataset_dir, volume_id):
@@ -564,8 +560,7 @@ def resume_upload(local_path, volume_id, remote_path):
             local_path,
             volume_id,
             remote_path,
-            chunk_size=100 * 1024 * 1024,
-            enable_resume=True
+            chunk_size=100 * 1024 * 1024
         )
         print("✓ Upload resumed and completed")
     except Exception as e:
@@ -575,8 +570,7 @@ def resume_upload(local_path, volume_id, remote_path):
             local_path,
             volume_id,
             remote_path,
-            chunk_size=100 * 1024 * 1024,
-            enable_resume=False  # Force fresh upload
+            chunk_size=100 * 1024 * 1024
         )
 ```
 
@@ -696,8 +690,7 @@ def reliable_large_upload(local_path, volume_id, remote_path, max_retries=3):
                 local_path,
                 volume_id,
                 remote_path,
-                chunk_size=100 * 1024 * 1024,
-                enable_resume=True  # Resume from last successful chunk
+                chunk_size=100 * 1024 * 1024
             )
             
             print("✓ Upload successful!")
