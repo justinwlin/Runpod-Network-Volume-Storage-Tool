@@ -742,14 +742,28 @@ success = reliable_large_upload(
 
 ## API Server
 
-To run as a REST API server:
+Run your own REST API server that proxies to Runpod's API:
 
 ```bash
 # Start the server
 uv run runpod-storage-server --host 0.0.0.0 --port 8000
 
-# Visit http://localhost:8000/docs for API documentation
+# Access the interactive API documentation
+# FastAPI Docs (Swagger UI): http://localhost:8000/docs
+# ReDoc: http://localhost:8000/redoc
 ```
+
+### Interactive API Documentation
+
+Once the server is running, visit **http://localhost:8000/docs** for the interactive FastAPI documentation where you can:
+- Explore all available endpoints
+- Test API calls directly from your browser
+- View request/response schemas
+- See required headers and parameters
+
+The API server acts as a thin wrapper around Runpod's API, requiring:
+- **All endpoints**: `runpod-api-key` header
+- **File operations**: Additional `s3-access-key` and `s3-secret-key` headers
 
 ### Docker Deployment
 
