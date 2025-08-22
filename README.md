@@ -262,10 +262,11 @@ import os
 api = RunpodStorageAPI()
 volume_id = "your-volume-id"
 
-# Upload a single file (auto-detects optimal chunk size)
+# Upload a single file - automatically detects optimal chunk size!
 api.upload_file("data.csv", volume_id, "datasets/data.csv")
+# Auto-detects: < 1GB: 10MB chunks, 1-10GB: 50MB, 10-50GB: 100MB, >50GB: 200MB
 
-# Upload with progress tracking
+# Upload with progress tracking (still auto-detects chunk size)
 def upload_progress(bytes_uploaded, total_bytes, speed_mbps):
     percent = (bytes_uploaded / total_bytes) * 100
     print(f"Upload: {percent:.1f}% - {speed_mbps:.1f} MB/s")
@@ -277,12 +278,12 @@ api.upload_file(
     progress_callback=upload_progress
 )
 
-# Upload with custom chunk size (optional)
+# Override with custom chunk size if needed (optional)
 api.upload_file(
     "huge_dataset.tar",
     volume_id,
     "datasets/huge_dataset.tar",
-    chunk_size=200 * 1024 * 1024  # 200MB chunks for very large files
+    chunk_size=200 * 1024 * 1024  # Manual: 200MB chunks
 )
 
 # Upload entire directory with progress tracking
@@ -405,7 +406,15 @@ for file_info in all_files:
 
 ### Overview
 
-The tool supports large file uploads with automatic chunking, resume capability, and multipart uploads. Files over 5GB are automatically handled with multipart upload, and interrupted transfers can be resumed.
+The tool supports large file uploads with intelligent automatic optimization:
+
+**Automatic Chunk Size Detection** - No configuration needed! The tool automatically selects the optimal chunk size based on your file size:
+- **< 1 GB**: 10 MB chunks (fast for small files)
+- **1-10 GB**: 50 MB chunks (balanced performance)
+- **10-50 GB**: 100 MB chunks (efficient for large files)
+- **> 50 GB**: 200 MB chunks (optimized for huge files)
+
+This means you can simply call `upload_file()` without worrying about chunk sizes - the tool automatically optimizes for best performance. Of course, you can still override with a custom chunk_size if needed for specific network conditions.
 
 ### Interactive Mode (Easiest for Large Files)
 
