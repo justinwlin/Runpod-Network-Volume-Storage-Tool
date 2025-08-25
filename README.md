@@ -416,6 +416,12 @@ The tool supports large file uploads with intelligent automatic optimization:
 
 This means you can simply call `upload_file()` without worrying about chunk sizes - the tool automatically optimizes for best performance. Of course, you can still override with a custom chunk_size if needed for specific network conditions.
 
+**Resume Support** - Uploads are resumable by default! If your upload is interrupted:
+- The tool automatically saves progress for multipart uploads
+- On retry, it detects the incomplete upload and resumes from the last successful chunk
+- File integrity is verified using MD5 hashing
+- No need to re-upload parts that already succeeded
+
 ### Interactive Mode (Easiest for Large Files)
 
 The interactive mode handles large files automatically:
@@ -458,10 +464,11 @@ uv run runpod-storage upload /path/to/50gb_file.bin volume-id
 uv run runpod-storage upload /path/to/huge_file.bin volume-id \
   --chunk-size 104857600  # 100MB chunks
 
-# Upload with resume capability (default enabled)
+# Upload with resume capability (enabled by default)
+# If interrupted, just run the same command again to resume
 uv run runpod-storage upload /path/to/large_file.tar volume-id
 
-# Disable resume if you want fresh upload
+# Disable resume if you want a fresh upload (ignore previous progress)
 uv run runpod-storage upload /path/to/large_file.tar volume-id --no-resume
 
 # Upload large directory as compressed archive
@@ -562,36 +569,45 @@ def upload_large_dataset(dataset_dir, volume_id):
 
 # Resume interrupted upload
 def resume_upload(local_path, volume_id, remote_path):
-    """Resume an interrupted upload"""
-    try:
-        # Check if partial upload exists
-        api.upload_file(
-            local_path,
-            volume_id,
-            remote_path,
-            chunk_size=100 * 1024 * 1024
-        )
-        print("✓ Upload resumed and completed")
-    except Exception as e:
-        print(f"Error resuming upload: {e}")
-        print("Starting fresh upload...")
-        api.upload_file(
-            local_path,
-            volume_id,
-            remote_path,
-            chunk_size=100 * 1024 * 1024
-        )
+    """Resume an interrupted upload - enabled by default!"""
+    # The SDK automatically handles resume:
+    # 1. Checks for existing incomplete uploads
+    # 2. Verifies file integrity with MD5 hash
+    # 3. Resumes from last successful chunk
+    api.upload_file(
+        local_path,
+        volume_id,
+        remote_path,
+        # enable_resume=True is the default
+    )
+    print("✓ Upload completed (resumed if interrupted)")
+
+# Force fresh upload (ignore previous progress)
+def fresh_upload(local_path, volume_id, remote_path):
+    """Start a new upload, ignoring any previous progress"""
+    api.upload_file(
+        local_path,
+        volume_id,
+        remote_path,
+        enable_resume=False  # Disable resume
+    )
+    print("✓ Fresh upload completed")
 ```
 
 ### Optimizing Large Transfers
 
 #### Best Practices
 
-1. **Choose the Right Chunk Size:**
-   - < 1 GB files: 5-10 MB chunks
-   - 1-10 GB files: 50 MB chunks
-   - 10-50 GB files: 100 MB chunks
-   - > 50 GB files: 200 MB chunks
+1. **Automatic Chunk Size (Recommended):**
+   - Let the SDK auto-detect optimal chunk size - no configuration needed!
+   - The tool intelligently selects chunk size based on file size
+   - Override only if you have specific network requirements
+   
+   **Default chunk sizes by file size:**
+   - **< 1 GB**: 10 MB chunks
+   - **1-10 GB**: 50 MB chunks  
+   - **10-50 GB**: 100 MB chunks
+   - **> 50 GB**: 200 MB chunks
 
 2. **Network Optimization:**
    ```bash
@@ -729,14 +745,30 @@ success = reliable_large_upload(
 ### Troubleshooting Large Uploads
 
 **Upload fails midway:**
-- The tool supports resume by default for files > 100MB
-- Simply run the same upload command again to resume
-- Use `--no-resume` flag to start fresh if needed
+- The tool supports resume by default for multipart uploads
+- Simply run the same upload command again to resume from where it left off
+- Use `--no-resume` flag (CLI) or `enable_resume=False` (SDK) to start fresh
 
 **"Request timeout" errors:**
 - Increase chunk size for better efficiency
 - Check your internet connection stability
 - Consider uploading during off-peak hours
+
+**Cleaning up abandoned uploads:**
+```python
+# Clean up incomplete uploads older than 24 hours
+from runpod_storage import RunpodStorageAPI
+
+api = RunpodStorageAPI()
+volume_id = "your-volume-id"
+
+# Remove abandoned multipart uploads
+cleaned = api.cleanup_abandoned_uploads(volume_id, max_age_hours=24)
+print(f"Cleaned up {cleaned} abandoned uploads")
+
+# You can also clean up more aggressively (e.g., uploads older than 1 hour)
+cleaned = api.cleanup_abandoned_uploads(volume_id, max_age_hours=1)
+```
 
 **"Insufficient storage" errors:**
 - Check volume size: `uv run runpod-storage list-volumes`

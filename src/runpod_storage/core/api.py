@@ -246,6 +246,29 @@ class RunpodStorageAPI:
         except:
             return False
 
+    def cleanup_abandoned_uploads(self, volume_id: str, max_age_hours: int = 24) -> int:
+        """Clean up abandoned multipart uploads for a volume.
+        
+        Args:
+            volume_id: Network volume ID
+            max_age_hours: Maximum age in hours for uploads to keep (default: 24)
+            
+        Returns:
+            Number of uploads cleaned up
+            
+        Example:
+            >>> # Clean up uploads older than 24 hours
+            >>> cleaned = api.cleanup_abandoned_uploads("vol_123")
+            >>> print(f"Cleaned up {cleaned} abandoned uploads")
+            >>> 
+            >>> # Clean up more aggressively (older than 1 hour)
+            >>> cleaned = api.cleanup_abandoned_uploads("vol_123", max_age_hours=1)
+        """
+        volume = self.get_volume(volume_id)
+        datacenter_id = volume["dataCenterId"]
+        s3_client = self._get_s3_client(datacenter_id)
+        return s3_client.cleanup_abandoned_uploads(volume_id, max_age_hours)
+
 
 # Convenience functions for quick usage
 def list_volumes(api_key: Optional[str] = None) -> List[Dict[str, Any]]:
